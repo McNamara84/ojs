@@ -1,0 +1,80 @@
+# =============================================================================
+# OJS (Open Journal Systems) – lokale Entwicklungsumgebung
+# =============================================================================
+# Start:   docker compose -f docker-compose.dev.yml up -d
+# OJS:     http://localhost:8081   (OJS_HTTP_PORT)
+# Mailpit: http://localhost:8025   (MAILPIT_HTTP_PORT)
+#
+# Erstes Setup: scripts/setup-dev.ps1 (erzeugt .env und config.inc.php)
+# =============================================================================
+
+name: ${COMPOSE_PROJECT_NAME:-ojs}
+
+services:
+  ojs-db:
+    image: ${MARIADB_IMAGE:-mariadb:11.8}
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:?DB_NAME fehlt in .env}
+      MARIADB_USER: ${DB_USER:?DB_USER fehlt in .env}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD fehlt in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD fehlt in .env}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [ojs-internal]
+    restart: unless-stopped
+
+  ojs-app:
+    build:
+      context: ./docker/ojs
+      args:
+        OJS_IMAGE_TAG: ${OJS_IMAGE_TAG:-3_5_0-5}
+    image: ojs-dev:${OJS_IMAGE_TAG:-3_5_0-5}
+    ports:
+      - "127.0.0.1:${OJS_HTTP_PORT:-8081}:80"
+    environment:
+      SERVERNAME: localhost
+      TZ: ${TZ:-Europe/Berlin}
+      XDEBUG_MODE: ${XDEBUG_MODE:-off}
+      PKP_CONF: /var/www/html/config.inc.php
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - files:/var/www/files
+      - public:/var/www/html/public
+      - ./docker/ojs/config.inc.php:/var/www/html/config.inc.php
+      # Optional: eigenes Plugin live entwickeln
+      # - ./plugins/generic/myPlugin:/var/www/html/plugins/generic/myPlugin
+    depends_on:
+      ojs-db:
+        condition: service_healthy
+      ojs-mailpit:
+        condition: service_started
+    networks: [ojs-internal]
+    restart: unless-stopped
+
+  ojs-mailpit:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.31}
+    ports:
+      - "127.0.0.1:${MAILPIT_HTTP_PORT:-8025}:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "5000"
+      TZ: ${TZ:-Europe/Berlin}
+    networks: [ojs-internal]
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  files:
+  public:
+
+networks:
+  ojs-internal:
