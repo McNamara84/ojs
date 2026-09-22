@@ -47,12 +47,27 @@ function New-RandomSecret([int]$Length = 24) {
     -join ($bytes | ForEach-Object { $chars[$_ % $chars.Length] })
 }
 
+# Gleiche Fallbacks wie in docker-compose.dev.yml (${VAR:-default}),
+# damit eine .env ohne diese Werte auch hier funktioniert.
+$EnvDefaults = @{
+    OJS_IMAGE_TAG     = '3_5_0-5'
+    OJS_HTTP_PORT     = '8081'
+    MAILPIT_HTTP_PORT = '8025'
+    TZ                = 'Europe/Berlin'
+}
+
 function Read-EnvFile([string]$Path) {
     $values = @{}
     foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
         if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$') {
             $values[$Matches[1]] = $Matches[2].Trim('"')
         }
+    }
+    foreach ($key in $EnvDefaults.Keys) {
+        if ([string]::IsNullOrWhiteSpace($values[$key])) { $values[$key] = $EnvDefaults[$key] }
+    }
+    if ([string]::IsNullOrWhiteSpace($values['OJS_BASE_URL'])) {
+        $values['OJS_BASE_URL'] = "http://localhost:$($values['OJS_HTTP_PORT'])"
     }
     $values
 }
@@ -78,10 +93,12 @@ function Set-IniValue([System.Collections.Generic.List[string]]$Lines, [string]$
     else { $Lines.Insert($start + 1, $newLine) }
 }
 
-function Test-ProjectRunning {
-    $ids = & docker compose -f $ComposeFile --env-file $EnvFile ps -q 2>$null
+function Test-ServiceRunning([string]$Service) {
+    $ids = & docker compose -f $ComposeFile --env-file $EnvFile ps -q --status running $Service 2>$null
     return [bool]$ids
 }
+
+function Test-AppRunning { Test-ServiceRunning 'ojs-app' }
 
 # --- 1. Docker pruefen ---------------------------------------------------------
 Write-Step 'Pruefe Docker ...'
@@ -104,7 +121,7 @@ $envValues = Read-EnvFile $EnvFile
 if ($SyncSource) {
     $target = Join-Path $Root 'ojs-src'
     Write-Step "Kopiere OJS-Code aus dem Container nach $target ..."
-    if (-not (Test-ProjectRunning)) { throw 'Stack laeuft nicht. Erst starten: docker compose -f docker-compose.dev.yml up -d' }
+    if (-not (Test-AppRunning)) { throw 'ojs-app laeuft nicht. Erst starten: docker compose -f docker-compose.dev.yml up -d' }
     if (Test-Path $target) { Remove-Item -Recurse -Force $target }
     Invoke-Compose cp 'ojs-app:/var/www/html' $target
     Write-Step 'Fertig. ojs-src ist eine reine Referenzkopie (Aenderungen dort wirken NICHT im Container).'
@@ -112,13 +129,14 @@ if ($SyncSource) {
 }
 
 # --- 3. Ports pruefen ----------------------------------------------------------
-if (-not (Test-ProjectRunning)) {
-    Write-Step 'Pruefe freie Host-Ports ...'
-    foreach ($name in 'OJS_HTTP_PORT', 'MAILPIT_HTTP_PORT') {
-        $port = [int]$envValues[$name]
-        if (Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue) {
-            throw "Port $port ($name) ist bereits belegt. Bitte in .env aendern."
-        }
+# Ein Port wird nur geprueft, wenn der eigene Dienst ihn nicht schon belegt.
+Write-Step 'Pruefe freie Host-Ports ...'
+foreach ($entry in @(@('OJS_HTTP_PORT', 'ojs-app'), @('MAILPIT_HTTP_PORT', 'ojs-mailpit'))) {
+    $name, $service = $entry
+    if (Test-ServiceRunning $service) { continue }
+    $port = [int]$envValues[$name]
+    if (Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue) {
+        throw "Port $port ($name) ist bereits belegt. Bitte in .env aendern."
     }
 }
 
@@ -128,7 +146,18 @@ Invoke-Compose pull ojs-db ojs-mailpit
 Invoke-Compose build --pull ojs-app
 
 # --- 5. config.inc.php erzeugen ------------------------------------------------
-if (-not (Test-Path $ConfigFile)) {
+# Startet man den Stack ohne dieses Skript, legt Docker fuer die fehlende
+# Bind-Mount-Quelle ein leeres Verzeichnis an - das muss weg.
+if (Test-Path $ConfigFile -PathType Container) {
+    if (Get-ChildItem $ConfigFile -Force) {
+        throw "$ConfigFile ist ein nicht-leeres Verzeichnis. Bitte pruefen und manuell entfernen."
+    }
+    Write-Step 'Entferne von Docker angelegtes Verzeichnis docker/ojs/config.inc.php ...'
+    if (Test-AppRunning) { Invoke-Compose stop ojs-app }
+    Remove-Item $ConfigFile
+}
+
+if (-not (Test-Path $ConfigFile -PathType Leaf)) {
     Write-Step 'Erzeuge docker/ojs/config.inc.php aus dem Image-Template ...'
     $image = "ojs-dev:$($envValues['OJS_IMAGE_TAG'])"
     $cid = (& docker create $image).Trim()

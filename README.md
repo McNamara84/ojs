@@ -8,7 +8,7 @@ Lokale Docker-Umgebung für [Open Journal Systems](https://github.com/pkp/ojs) a
 | Mailpit | `axllent/mailpit:v1.31` | http://localhost:8025 |
 | MariaDB | 11.8 LTS | nur intern (`ojs-db:3306`) |
 
-Die Umgebung ist eigenständig: Sie hat ein eigenes Netzwerk und keinen Reverse-Proxy. Alle Ports sind nur an `127.0.0.1` gebunden. Details und Hintergründe stehen in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+Die Umgebung ist eigenständig: Sie hat ein eigenes Netzwerk und keinen Reverse-Proxy. Alle Ports sind nur an `127.0.0.1` gebunden.
 
 ## Erstes Setup
 
@@ -63,7 +63,18 @@ docker compose -f docker-compose.dev.yml down
 ```
 
 - **Mails:** Alle E-Mails von OJS landen in Mailpit (http://localhost:8025). Nichts verlässt den Rechner.
-- **Jobs und geplante Aufgaben:** Sie laufen über den eingebauten Job- bzw. Task-Runner am Ende von Web-Requests. Einen Cron-Job braucht es dafür nicht.
+- **Jobs und geplante Aufgaben:** In `config.inc.php` sind `[queues] job_runner = On` und `[schedule] task_runner = On` aktiv (OJS-Standard). Beide Runner laufen am Ende von Web-Requests, der Task-Runner höchstens alle 60 Sekunden. Geplante Aufgaben laufen also nur, solange jemand OJS aufruft. Für die lokale Entwicklung reicht das.
+  - Einen Lauf erzwingen:
+
+    ```powershell
+    docker compose -f docker-compose.dev.yml exec ojs-app php lib/pkp/tools/scheduler.php run
+    ```
+
+  - Jobs aus der Warteschlange abarbeiten:
+
+    ```powershell
+    docker compose -f docker-compose.dev.yml exec ojs-app php lib/pkp/tools/jobs.php work --stop-when-empty
+    ```
 - **Shell im Container:**
 
   ```powershell
@@ -126,8 +137,14 @@ Danach `docker compose -f docker-compose.dev.yml up -d ojs-app` ausführen.
   Danach `up -d` ausführen.
 - **DB-Backup:**
 
+  Der Dump wird im Container in eine Datei geschrieben und dann herauskopiert. So stören weder ein Pseudo-TTY noch die Umkodierung bei der PowerShell-Umleitung (`>`).
+
   ```powershell
-  docker compose -f docker-compose.dev.yml exec ojs-db sh -c 'mariadb-dump -u root -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' > backup.sql
+  docker compose -f docker-compose.dev.yml exec -T ojs-db sh -c 'mariadb-dump -u root -p"$MARIADB_ROOT_PASSWORD" --result-file=/tmp/backup.sql "$MARIADB_DATABASE"'
+  ```
+
+  ```powershell
+  docker compose -f docker-compose.dev.yml cp ojs-db:/tmp/backup.sql ./backup.sql
   ```
 
 - **Kompletter Reset** (löscht DB, Uploads und Konfiguration):
