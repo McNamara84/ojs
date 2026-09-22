@@ -190,7 +190,10 @@ if (-not (Test-Path $ConfigFile -PathType Leaf)) {
     Set-IniValue $lines 'email' 'smtp_port' '1025'
 
     Set-IniValue $lines 'debug' 'show_stacktrace' 'On'
-    Set-IniValue $lines 'debug' 'display_errors' 'On'
+    # Nicht im HTML ausgeben: Deprecations aus dem OJS-Kern wuerden sonst vor dem
+    # Doctype landen (headers already sent, Quirks-Mode, TinyMCE startet nicht).
+    # PHP-Fehler landen weiterhin vollstaendig in: docker compose logs ojs-app
+    Set-IniValue $lines 'debug' 'display_errors' 'Off'
 
     [System.IO.File]::WriteAllText($ConfigFile, (($lines -join "`n") + "`n"), $Utf8NoBom)
 } else {

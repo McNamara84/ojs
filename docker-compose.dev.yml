@@ -38,6 +38,10 @@ services:
     image: ojs-dev:${OJS_IMAGE_TAG:-3_5_0-5}
     ports:
       - "127.0.0.1:${OJS_HTTP_PORT:-8081}:80"
+    # Das Image laeuft als www-data (rootless). Docker >= 20.10 setzt diesen
+    # Wert bereits standardmaessig; hier explizit, damit Port 80 garantiert bindbar ist.
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
     environment:
       SERVERNAME: localhost
       TZ: ${TZ:-Europe/Berlin}

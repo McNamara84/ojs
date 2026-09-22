@@ -62,6 +62,7 @@ docker compose -f docker-compose.dev.yml logs -f ojs-app
 docker compose -f docker-compose.dev.yml down
 ```
 
+- **PHP-Fehler:** Sie werden nicht im HTML angezeigt (`[debug] display_errors = Off`), sondern vollständig mit `logs -f ojs-app` ausgegeben. OJS 3.5.0-5 erzeugt unter PHP 8.3 einige `Deprecated`-Meldungen aus dem eigenen Kerncode (`lib/pkp/…`). Würden sie in der Seite erscheinen, bräche das Header, Doctype und den TinyMCE-Editor.
 - **Mails:** Alle E-Mails von OJS landen in Mailpit (http://localhost:8025). Nichts verlässt den Rechner.
 - **Jobs und geplante Aufgaben:** In `config.inc.php` sind `[queues] job_runner = On` und `[schedule] task_runner = On` aktiv (OJS-Standard). Beide Runner laufen am Ende von Web-Requests, der Task-Runner höchstens alle 60 Sekunden. Geplante Aufgaben laufen also nur, solange jemand OJS aufruft. Für die lokale Entwicklung reicht das.
   - Einen Lauf erzwingen:
