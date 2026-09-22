@@ -1,0 +1,31 @@
+#!/bin/sh
+# Entrypoint fuer ojs-queue und ojs-scheduler (Stage).
+# Wartet, bis OJS per Web-Installer installiert wurde, und startet dann den Worker.
+set -eu
+
+CONFIG=/var/www/config/config.inc.php
+ROLE="${1:-}"
+
+case "$ROLE" in
+    jobs | scheduler) ;;
+    *)
+        echo "Aufruf: ojs-worker jobs|scheduler" >&2
+        exit 64
+        ;;
+esac
+
+until grep -Eq '^[[:space:]]*installed[[:space:]]*=[[:space:]]*On' "$CONFIG" 2>/dev/null; do
+    echo "[ojs-worker:$ROLE] OJS ist noch nicht installiert - pruefe erneut in 30 s."
+    sleep 30
+done
+
+echo "[ojs-worker:$ROLE] Starte."
+cd /var/www/html
+
+if [ "$ROLE" = "jobs" ]; then
+    # --max-time: Worker endet stuendlich und wird per restart-Policy frisch gestartet
+    # (schuetzt vor Speicherlecks, analog PHP_FPM_MAX_REQUESTS bei ERNIE).
+    exec php lib/pkp/tools/jobs.php work --sleep=3 --tries=3 --timeout=300 --max-time=3600
+fi
+
+exec php lib/pkp/tools/scheduler.php work

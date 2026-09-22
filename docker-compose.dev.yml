@@ -33,6 +33,7 @@ services:
   ojs-app:
     build:
       context: ./docker/ojs
+      target: dev
       args:
         OJS_IMAGE_TAG: ${OJS_IMAGE_TAG:-3_5_0-5}
     image: ojs-dev:${OJS_IMAGE_TAG:-3_5_0-5}

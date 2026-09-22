@@ -1,0 +1,33 @@
+#!/bin/sh
+# Entrypoint fuer ojs-app (Stage): Config setzen -> ggf. DB-Upgrade -> Apache.
+set -eu
+
+CONFIG=/var/www/config/config.inc.php
+
+php /usr/local/lib/ojs/ojs-configure.php --config="$CONFIG"
+
+if grep -Eq '^[[:space:]]*installed[[:space:]]*=[[:space:]]*On' "$CONFIG"; then
+    if [ "${OJS_RUN_UPGRADE:-1}" = "1" ]; then
+        # Analog ERNIE_RUN_MIGRATIONS: nur upgraden, wenn der Code neuer ist als die DB.
+        versions="$(php tools/upgrade.php check 2>/dev/null || true)"
+        code_version="$(printf '%s\n' "$versions" | sed -n 's/^Code version:[[:space:]]*//p')"
+        db_version="$(printf '%s\n' "$versions" | sed -n 's/^Database version:[[:space:]]*//p')"
+
+        if [ -z "$code_version" ] || [ -z "$db_version" ]; then
+            echo "[ojs-stage-start] FEHLER: Versionen nicht ermittelbar:" >&2
+            printf '%s\n' "$versions" >&2
+            exit 1
+        fi
+
+        if [ "$code_version" != "$db_version" ]; then
+            echo "[ojs-stage-start] Upgrade der Datenbank von $db_version auf $code_version ..."
+            php tools/upgrade.php upgrade
+        else
+            echo "[ojs-stage-start] Datenbank ist aktuell ($db_version)."
+        fi
+    else
+        echo "[ojs-stage-start] OJS_RUN_UPGRADE=0 - automatisches Upgrade uebersprungen."
+    fi
+fi
+
+exec apache2-foreground
