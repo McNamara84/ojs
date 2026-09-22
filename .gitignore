@@ -1,0 +1,3 @@
+.env
+docker/ojs/config.inc.php
+ojs-src/
