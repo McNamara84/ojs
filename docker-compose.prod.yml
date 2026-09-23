@@ -17,7 +17,8 @@
 #
 # Stack-Variablen (Portainer): OJS_DB_PASSWORD, OJS_DB_ROOT_PASSWORD,
 #   MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_ENCRYPTION, MAIL_FROM_ADDRESS
-#   optional: OJS_RUN_UPGRADE, OJS_WORKER_WAIT_SECONDS, OJS_DB_NAME, OJS_DB_USER
+#   optional: OJS_RUN_UPGRADE, OJS_ALLOW_INSTALLER, OJS_WORKER_WAIT_SECONDS,
+#             OJS_DB_NAME, OJS_DB_USER
 # Rollback: OJS_PROD_APP_IMAGE=ghcr.io/mcnamara84/ojs-app@sha256:<digest>
 # Details: docs/production-deployment.md
 # =============================================================================
@@ -45,6 +46,8 @@ services:
       MAIL_ENCRYPTION: ${MAIL_ENCRYPTION:-tls}
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@gfz-potsdam.de}
       OJS_RUN_UPGRADE: ${OJS_RUN_UPGRADE:-1}
+      # Notausgang: 1 erlaubt den Installer auch bei halb initialisierter Datenbank
+      OJS_ALLOW_INSTALLER: ${OJS_ALLOW_INSTALLER:-0}
     volumes:
       - ojs-config:/var/www/config
       - ojs-files:/var/www/files

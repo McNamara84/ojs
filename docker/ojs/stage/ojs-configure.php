@@ -71,8 +71,11 @@ function quoted(string $value): string
  * ueberschreibt den Bestand. Ein abgebrochener Start ist die harmlosere Variante:
  * Der Container wird neu gestartet und meldet den Fehler im Log.
  *
- * Einzige Ausnahme ist die fehlende Tabelle "versions" (MySQL-Fehler 1146). Das ist
- * der normale Zustand einer frischen Datenbank, und dann ist der Installer richtig.
+ * Als leer gilt nur die fehlende Tabelle "versions" (MySQL-Fehler 1146) - der normale
+ * Zustand einer frischen Datenbank. Existiert die Tabelle, enthaelt aber keine
+ * aktuelle OJS-Version, ist die Datenbank halb initialisiert oder gehoert einer
+ * anderen PKP-Anwendung; auch dann bricht der Start ab. Mit OJS_ALLOW_INSTALLER=1
+ * laesst sich dieser Fall bewusst freigeben.
  */
 const ER_NO_SUCH_TABLE = 1146;
 
@@ -106,7 +109,21 @@ function databaseHasInstallation(array $db): bool
     $count = (int) $result->fetch_row()[0];
     $connection->close();
 
-    return $count > 0;
+    if ($count > 0) {
+        return true;
+    }
+
+    if (env('OJS_ALLOW_INSTALLER', '0') === '1') {
+        info('Tabelle "versions" ohne aktuelle OJS-Version - per OJS_ALLOW_INSTALLER=1 freigegeben.');
+        return false;
+    }
+
+    fail(
+        'Die Tabelle "versions" existiert, enthaelt aber keine aktuelle OJS-Version. '
+        . 'Die Datenbank ist halb initialisiert oder gehoert einer anderen Anwendung. '
+        . 'Start abgebrochen, damit der Installer sie nicht ueberschreibt. '
+        . 'Ist der Installer hier wirklich gewollt: OJS_ALLOW_INSTALLER=1 setzen.'
+    );
 }
 
 /**
