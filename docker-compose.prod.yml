@@ -25,7 +25,7 @@
 
 services:
   ojs-app:
-    image: "${OJS_PROD_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app:deployment-template}"
+    image: "${OJS_PROD_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app@sha256:6ebfeaae70e07a1618d418236005eaa13376bee6ec2b200816b82c5f237a142a}"
     pull_policy: always
     container_name: ojs-prod-app
     restart: unless-stopped
@@ -74,7 +74,7 @@ services:
       - "traefik.docker.network=traefik"
 
   ojs-queue:
-    image: "${OJS_PROD_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app:deployment-template}"
+    image: "${OJS_PROD_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app@sha256:6ebfeaae70e07a1618d418236005eaa13376bee6ec2b200816b82c5f237a142a}"
     pull_policy: always
     container_name: ojs-prod-queue
     restart: unless-stopped
@@ -93,7 +93,7 @@ services:
         condition: service_healthy
 
   ojs-scheduler:
-    image: "${OJS_PROD_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app:deployment-template}"
+    image: "${OJS_PROD_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app@sha256:6ebfeaae70e07a1618d418236005eaa13376bee6ec2b200816b82c5f237a142a}"
     pull_policy: always
     container_name: ojs-prod-scheduler
     restart: unless-stopped
