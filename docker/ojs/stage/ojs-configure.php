@@ -51,6 +51,30 @@ function quoted(string $value): string
 }
 
 /**
+ * Prueft, ob die Datenbank bereits eine OJS-Installation enthaelt.
+ *
+ * Entscheidend ist eine aktuelle Version des Produkts in der Tabelle "versions";
+ * die legt erst der Installer bzw. das Upgrade an. Ist die Datenbank leer oder nicht
+ * erreichbar, liefert die Funktion false und der Web-Installer bleibt zustaendig.
+ */
+function databaseHasInstallation(array $db): bool
+{
+    mysqli_report(MYSQLI_REPORT_OFF);
+    $connection = @new mysqli($db['host'], $db['user'], $db['password'], $db['name']);
+
+    if ($connection->connect_errno) {
+        info("Datenbank nicht erreichbar ({$connection->connect_error}) - Installationsstatus unveraendert.");
+        return false;
+    }
+
+    $result = @$connection->query("SELECT COUNT(*) FROM versions WHERE current = 1 AND product = 'ojs2'");
+    $count = $result ? (int) $result->fetch_row()[0] : 0;
+    $connection->close();
+
+    return $count > 0;
+}
+
+/**
  * Setzt key = value in einer INI-Sektion. Bevorzugt eine aktive Zeile, sonst wird
  * eine auskommentierte Zeile ersetzt, sonst direkt nach dem Sektionskopf eingefuegt.
  */
@@ -112,6 +136,13 @@ if (filter_var($mailFrom, FILTER_VALIDATE_EMAIL) === false) {
     fail("MAIL_FROM_ADDRESS ist keine gueltige E-Mail-Adresse: {$mailFrom}");
 }
 
+$dbConfig = [
+    'host' => env('OJS_DB_HOST', 'ojs-db'),
+    'user' => env('OJS_DB_USER', 'ojs'),
+    'password' => env('OJS_DB_PASSWORD'),
+    'name' => env('OJS_DB_NAME', 'ojs'),
+];
+
 $settings = [
     ['general', 'base_url', quoted($baseUrl)],
     // Gleiches Format wie der Web-Installer, sonst wechselt die Zeile bei jedem Start
@@ -121,10 +152,10 @@ $settings = [
     ['general', 'time_zone', quoted(env('TZ', 'Europe/Berlin'))],
 
     ['database', 'driver', 'mysqli'],
-    ['database', 'host', quoted(env('OJS_DB_HOST', 'ojs-db'))],
-    ['database', 'username', quoted(env('OJS_DB_USER', 'ojs'))],
-    ['database', 'password', quoted(env('OJS_DB_PASSWORD'))],
-    ['database', 'name', quoted(env('OJS_DB_NAME', 'ojs'))],
+    ['database', 'host', quoted($dbConfig['host'])],
+    ['database', 'username', quoted($dbConfig['user'])],
+    ['database', 'password', quoted($dbConfig['password'])],
+    ['database', 'name', quoted($dbConfig['name'])],
 
     ['files', 'files_dir', quoted('/var/www/files')],
 
@@ -185,4 +216,29 @@ if ($newContent !== $content) {
 }
 
 $installed = preg_match('/^\s*installed\s*=\s*On\b/mi', $newContent) === 1;
+
+// --- Bestehende Installation erkennen ------------------------------------------
+// Geht die config.inc.php verloren (z. B. weil sie nur im Container lag), steht
+// installed = Off, obwohl die Datenbank vollstaendig ist. OJS zeigt dann den
+// Installer - und wer ihn abschickt, ueberschreibt den Bestand. Deshalb pruefen wir
+// die Datenbank und markieren die Installation wieder als vorhanden.
+if (!$installed && databaseHasInstallation($dbConfig)) {
+    info('Datenbank enthaelt bereits eine OJS-Installation - setze installed = On.');
+    setIniValue($lines, 'general', 'installed', 'On');
+    $newContent = implode("\n", $lines) . "\n";
+    if (file_put_contents($configFile, $newContent, LOCK_EX) === false) {
+        fail("Konnte {$configFile} nicht schreiben.");
+    }
+    $installed = true;
+}
+
+// Ohne app_key startet OJS 3.5 nicht. Bei verlorener Config fehlt er.
+if ($installed && !preg_match('/^\s*app_key\s*=\s*"?base64:/mi', $newContent)) {
+    info('Kein app_key vorhanden - erzeuge einen neuen (Nutzer muessen sich neu anmelden).');
+    exec('php /var/www/html/lib/pkp/tools/appKey.php generate --force 2>&1', $output, $status);
+    if ($status !== 0) {
+        fail('app_key konnte nicht erzeugt werden: ' . implode(' ', $output));
+    }
+}
+
 info('Status: ' . ($installed ? 'installiert' : "NICHT installiert – Web-Installer unter {$baseUrl} aufrufen"));
