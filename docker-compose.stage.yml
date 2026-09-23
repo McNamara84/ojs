@@ -113,9 +113,10 @@ services:
       - traefik
     labels:
       - "traefik.enable=true"
+      # Nur /emtf und /emtf/...: PathPrefix allein trifft in Traefik auch /emtf-old.
       # Laengere Regel als der OJS-Router, gewinnt damit fuer /emtf; zusaetzlich
       # ausdrueckliche Prioritaet, damit die Reihenfolge nicht von Details abhaengt.
-      - "traefik.http.routers.emtf-router.rule=Host(`ojs.rz-vm182.gfz.de`) && PathPrefix(`/emtf`)"
+      - "traefik.http.routers.emtf-router.rule=Host(`ojs.rz-vm182.gfz.de`) && (Path(`/emtf`) || PathPrefix(`/emtf/`))"
       - "traefik.http.routers.emtf-router.entrypoints=https"
       - "traefik.http.routers.emtf-router.priority=1000"
       - "traefik.http.routers.emtf-router.service=emtf-service"

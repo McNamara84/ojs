@@ -29,7 +29,12 @@ ALLOWED_MISSING: dict[str, str] = {
     "./pdf/Komplett_EMTF_2003.pdf": "Sammelband nicht im Bestand",
 }
 
-LINK_PATTERN = re.compile(r'(?:href|src)\s*=\s*"([^"]+)"', re.IGNORECASE)
+# Der Word-Export im Archiv schreibt Attribute teils ohne Anfuehrungszeichen
+# (src=dgg-logo.gif), teils mit einfachen. Alle drei Schreibweisen beruecksichtigen.
+LINK_PATTERN = re.compile(
+    r"""(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>`]+))""",
+    re.IGNORECASE,
+)
 EXTERNAL_PATTERN = re.compile(r"^(https?:|mailto:|#|javascript:|data:)", re.IGNORECASE)
 
 
@@ -54,8 +59,8 @@ def main(root: str) -> int:
             with open(path, encoding="utf-8", errors="replace") as handle:
                 content = handle.read()
 
-            for raw in LINK_PATTERN.findall(content):
-                link = raw.strip()
+            for quoted, single, bare in LINK_PATTERN.findall(content):
+                link = (quoted or single or bare).strip()
                 if not link or EXTERNAL_PATTERN.match(link):
                     continue
 

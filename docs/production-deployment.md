@@ -63,6 +63,7 @@ Der Container `ojs-prod-emtf` liefert die alte EMTF-Sammlung (Elektromagnetische
 - **Verweise:** `scripts/check-emtf-links.py` prüft in „Stage Checks“, ob alle lokal verlinkten Dateien vorhanden sind. Bewusst geduldete Lücken stehen mit Begründung in `ALLOWED_MISSING` im Skript, derzeit die nicht überlieferten Sammelbände 2001 und 2003 sowie Reste eines Word-Exports.
 - **Pfad:** Traefik entfernt das Präfix `/emtf` **nicht**. Die Dateien liegen deshalb auch im Container unter `emtf/`. Der Grund: nginx erzeugt für Verzeichnisse ohne Schrägstrich eine Weiterleitung aus dem angefragten Pfad. Ohne Präfix zeigte sie auf `/2007/` statt auf `/emtf/2007/`.
 - **Weiterleitungen:** nginx liefert sie relativ aus (`absolute_redirect off`), weil es nichts von der TLS-Terminierung durch Traefik weiß und sonst `http://`-Adressen erzeugen würde.
+- **Route:** Die Regel lautet `Host(...) && (Path(`/emtf`) || PathPrefix(`/emtf/`))`. `PathPrefix` allein würde in Traefik auch `/emtf-old` oder `/emtf.html` abfangen, weil es nicht segmentweise vergleicht. Das ist nachgestellt und geprüft.
 - **Priorität:** Auf `dataservices.gfz.de` existiert bereits ein Router, der auf `dataservices.gfz-potsdam.de` weiterleitet. Der EMTF-Router trägt deshalb `priority=1000` und greift für `/emtf` zuverlässig zuerst. Alle anderen Pfade bleiben unverändert beim bestehenden Router.
 - **Aufgeräumt:** Die FTP-Altlasten (`WSFTP32.dll`, zwei `WS_FTP.LOG` mit internen Serverpfaden) wurden entfernt.
 

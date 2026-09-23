@@ -123,9 +123,10 @@ services:
       - traefik
     labels:
       - "traefik.enable=true"
+      # Nur /emtf und /emtf/...: PathPrefix allein trifft in Traefik auch /emtf-old.
       # Auf diesem Host existiert bereits ein Router (307 auf dataservices.gfz-potsdam.de);
       # ausdrueckliche Prioritaet, damit die Reihenfolge nicht von Details abhaengt.
-      - "traefik.http.routers.emtf-router.rule=Host(`dataservices.gfz.de`) && PathPrefix(`/emtf`)"
+      - "traefik.http.routers.emtf-router.rule=Host(`dataservices.gfz.de`) && (Path(`/emtf`) || PathPrefix(`/emtf/`))"
       - "traefik.http.routers.emtf-router.entrypoints=https"
       - "traefik.http.routers.emtf-router.tls=true"
       - "traefik.http.routers.emtf-router.priority=1000"
