@@ -47,7 +47,15 @@ Beim Start setzt `ojs-app` die umgebungsabhängigen Werte der `config.inc.php` a
 
 `installed` und `app_key` bleiben unberührt. Alle übrigen Werte werden bei jedem Start neu geschrieben, auch leer. Entfernst du also `MAIL_USERNAME` aus dem Stack, verschwinden Benutzername und Passwort auch aus der Config.
 
-Ist der Code neuer als die Datenbank, führt `ojs-app` automatisch `tools/upgrade.php upgrade` aus. Mit `OJS_RUN_UPGRADE=0` lässt sich das abschalten. Den Versionsvergleich macht `ojs-version-check.php` rein lokal. `tools/upgrade.php check` ist dafür ungeeignet, weil es zuerst die Versionsdatei von `pkp.sfu.ca` lädt und ohne ausgehende Verbindung abbricht, bevor es eine Version ausgibt.
+`ojs-app` vergleicht beim Start die Code- mit der Datenbankversion und handelt je nach Richtung:
+
+| Fall | Verhalten |
+|---|---|
+| Versionen gleich | normaler Start |
+| Datenbank älter | `tools/upgrade.php upgrade` läuft automatisch, danach startet Apache |
+| Datenbank neuer (typisch nach einem Image-Rollback) | Der Container startet **nicht** und nennt im Log die Auswege. Ein Upgrade mit älterem Code wäre der falsche Migrationspfad, und ein Downgrade beherrscht OJS nicht |
+
+Mit `OJS_RUN_UPGRADE=0` wird der Vergleich übersprungen und der Container startet ohne Prüfung. Den Versionsvergleich macht `ojs-version-check.php` rein lokal. `tools/upgrade.php check` ist dafür ungeeignet, weil es zuerst die Versionsdatei von `pkp.sfu.ca` lädt und ohne ausgehende Verbindung abbricht, bevor es eine Version ausgibt.
 
 Queue und Scheduler warten, bis OJS installiert ist **und** Code- und Datenbankversion übereinstimmen. Während eines Upgrades pausieren sie deshalb und starten danach von selbst (Prüfung alle 30 Sekunden, einstellbar über `OJS_WORKER_WAIT_SECONDS`).
 
@@ -137,6 +145,8 @@ OJS_STAGE_APP_IMAGE=ghcr.io/mcnamara84/ojs-app@sha256:<guter-digest>
 
 Danach den Stack neu deployen. Wird die Variable wieder entfernt, gilt wieder der automatisch gepflegte Stand.
 
+Geht der Rollback über einen Versionssprung zurück, ist die Datenbank anschließend neuer als der Code. `ojs-app` startet dann bewusst nicht und schreibt ins Log, was zu tun ist: entweder das passende Image deployen oder das zugehörige Datenbank-Backup zurückspielen. Nur wenn du die Abweichung bewusst in Kauf nimmst, startet `OJS_RUN_UPGRADE=0` den Container trotzdem.
+
 **Achtung:** Ein OJS-Datenbank-Upgrade lässt sich nicht automatisch umkehren. Vor dem Anheben von `OJS_IMAGE_TAG` deshalb ein Backup anlegen (siehe unten). Ein Rollback über einen Versionssprung hinweg braucht das zugehörige DB-Backup.
 
 ## OJS-Version aktualisieren
@@ -175,6 +185,7 @@ Diese Befunde stehen mit Begründung und **Ablaufdatum 21.11.2026** in `.trivyig
 | `ojs-stage-app` startet nicht, Log `[ojs-configure] FEHLER: …` | Eine Stack-Variable ist ungültig, z. B. `MAIL_FROM_ADDRESS` oder `MAIL_ENCRYPTION`. Die Meldung nennt die Variable |
 | `ojs-stage-app` bleibt *unhealthy* nach einem OJS-Update | Das Datenbank-Upgrade ist fehlgeschlagen. Log prüfen, bei Bedarf das Backup zurückspielen |
 | Queue/Scheduler melden dauerhaft „DB-Upgrade laeuft“ | Code- und DB-Version gehen auseinander. Log von `ojs-stage-app` prüfen. Stehen in `versions` mehrere Zeilen mit `current = 1`, ist die Tabelle inkonsistent |
+| `ojs-stage-app` startet nicht: „Die Datenbank … ist neuer als der Code …“ | Das Image wurde hinter den Stand der Datenbank zurückgerollt. Passendes Image deployen oder das zugehörige DB-Backup zurückspielen |
 | Die Seite lädt, aber Links zeigen auf `http://` | Traefik sendet `X-Forwarded-Proto` nicht. Prüfen, ob der Router den Entrypoint `https` nutzt |
 | 404 von Traefik | Der Container hängt nicht im Netzwerk `traefik`, oder das Label `traefik.enable=true` fehlt |
 | `deploy/stage` bewegt sich nicht | Die Läufe von **Stage Checks** bzw. **Publish Stage Images** prüfen. Ein veralteter Lauf überspringt die Promotion absichtlich |

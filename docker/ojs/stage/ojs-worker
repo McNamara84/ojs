@@ -24,10 +24,20 @@ while :; do
         echo "[ojs-worker:$ROLE] OJS ist noch nicht installiert - warte ${WAIT_SECONDS}s."
     elif ! versions="$(php /usr/local/lib/ojs/ojs-version-check.php 2>/dev/null)"; then
         echo "[ojs-worker:$ROLE] Anwendung noch nicht bereit - warte ${WAIT_SECONDS}s."
-    elif [ "${versions% *}" != "${versions#* }" ]; then
-        echo "[ojs-worker:$ROLE] DB-Upgrade laeuft (${versions#* } -> ${versions% *}) - warte ${WAIT_SECONDS}s."
     else
-        break
+        # shellcheck disable=SC2086 # absichtliches Wort-Splitting: "code db richtung"
+        set -- $versions
+        case "$3" in
+            equal)
+                break
+                ;;
+            db-newer)
+                echo "[ojs-worker:$ROLE] Datenbank ($2) ist neuer als der Code ($1) - warte ${WAIT_SECONDS}s. Siehe Log von ojs-app."
+                ;;
+            *)
+                echo "[ojs-worker:$ROLE] DB-Upgrade laeuft ($2 -> $1) - warte ${WAIT_SECONDS}s."
+                ;;
+        esac
     fi
     sleep "$WAIT_SECONDS"
 done
