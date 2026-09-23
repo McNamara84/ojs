@@ -5,8 +5,15 @@
  *
  * Laeuft bei jedem Start von ojs-app und ist idempotent:
  *  - fehlt config.inc.php im Volume, wird sie aus config.TEMPLATE.inc.php erzeugt;
- *  - DB, Mail, URL usw. werden aus Umgebungsvariablen gesetzt;
- *  - "installed" und "app_key" werden NIE angefasst (gehoeren dem Web-Installer).
+ *  - DB, Mail, URL usw. werden aus Umgebungsvariablen gesetzt.
+ *
+ * Sonderfall "installed" und "app_key": Normalerweise gehoeren beide dem
+ * Web-Installer und werden nicht angefasst. Enthaelt die Datenbank jedoch bereits
+ * eine Installation, waehrend die Konfiguration "installed = Off" meldet (typisch
+ * nach einem Verlust der config.inc.php), stellt dieses Skript beides wieder her:
+ * es setzt "installed = On" und erzeugt bei Bedarf einen neuen "app_key". Sonst
+ * wuerde OJS den Installer zeigen, und wer ihn abschickt, ueberschreibt den
+ * Datenbestand. Siehe Abschnitt "Bestehende Installation erkennen" weiter unten.
  *
  * Aufruf: php ojs-configure.php [--config=/pfad/config.inc.php]
  */
@@ -48,6 +55,132 @@ function env(string $name, ?string $default = null): string
 function quoted(string $value): string
 {
     return '"' . addslashes($value) . '"';
+}
+
+/**
+ * Prueft, ob die Datenbank bereits eine OJS-Installation enthaelt.
+ *
+ * Entscheidend ist eine aktuelle Version des Produkts in der Tabelle "versions";
+ * die legt erst der Installer bzw. das Upgrade an.
+ *
+ * Diese Funktion schlaegt im Zweifel fehl (fail closed): Nur eine erfolgreiche
+ * Abfrage ohne Treffer gilt als leere Datenbank. Jeder andere Fehler - keine
+ * Verbindung, fehlende Rechte, defekte Tabelle - bricht den Start ab. Sonst wuerde
+ * eine voruebergehende Stoerung wie eine leere Datenbank aussehen, und OJS wuerde
+ * den Installer anzeigen (er rendert auch ohne Datenbank). Wer ihn dann abschickt,
+ * ueberschreibt den Bestand. Ein abgebrochener Start ist die harmlosere Variante:
+ * Der Container wird neu gestartet und meldet den Fehler im Log.
+ *
+ * Als leer gilt die Datenbank nur, wenn die Tabelle "versions" fehlt (MySQL-Fehler
+ * 1146) UND ueberhaupt keine Tabellen vorhanden sind. Fehlt "versions", gibt es aber
+ * andere Tabellen, steht dort fremder oder unvollstaendiger Bestand (falscher
+ * Datenbankname, halb eingespielter Dump). Existiert "versions" ohne aktuelle
+ * OJS-Version, ist die Datenbank halb initialisiert oder gehoert einer anderen
+ * PKP-Anwendung. Beides bricht den Start ab; mit OJS_ALLOW_INSTALLER=1 laesst sich
+ * der Installer bewusst freigeben.
+ */
+const ER_NO_SUCH_TABLE = 1146;
+
+/**
+ * Prueft, ob die Datenbank wirklich leer ist, also gar keine Tabellen enthaelt.
+ * Nur dann ist der Web-Installer der richtige Weg. Gibt es Tabellen, aber keine
+ * "versions", steht dort fremder oder unvollstaendiger Bestand - dann Abbruch.
+ */
+function databaseIsEmpty(array $db): bool
+{
+    $connection = @new mysqli($db['host'], $db['user'], $db['password'], $db['name']);
+
+    if ($connection->connect_errno) {
+        fail("Datenbank {$db['name']} nicht erreichbar: {$connection->connect_error}. Start abgebrochen.");
+    }
+
+    $result = @$connection->query(
+        'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()'
+    );
+
+    if ($result === false) {
+        $error = $connection->error;
+        $connection->close();
+        fail("Tabellen der Datenbank nicht ermittelbar: {$error}. Start abgebrochen.");
+    }
+
+    $tables = (int) $result->fetch_row()[0];
+    $connection->close();
+
+    if ($tables === 0) {
+        info('Datenbank ist leer - der Web-Installer ist zustaendig.');
+        return true;
+    }
+
+    if (env('OJS_ALLOW_INSTALLER', '0') === '1') {
+        info("Datenbank enthaelt {$tables} Tabellen ohne OJS-Installation - per OJS_ALLOW_INSTALLER=1 freigegeben.");
+        return true;
+    }
+
+    fail(
+        "Die Datenbank {$db['name']} enthaelt {$tables} Tabellen, aber keine OJS-Installation. "
+        . 'Moeglicherweise ist der Datenbankname falsch oder ein Dump nur teilweise eingespielt. '
+        . 'Start abgebrochen, damit der Installer den Bestand nicht ueberschreibt. '
+        . 'Ist der Installer hier wirklich gewollt: OJS_ALLOW_INSTALLER=1 setzen.'
+    );
+}
+
+/** Liest die Config frisch von der Platte und prueft, ob ein app_key gesetzt ist. */
+function hasAppKey(string $configFile): bool
+{
+    $content = @file_get_contents($configFile);
+
+    return is_string($content) && preg_match('/^\s*app_key\s*=\s*"?base64:\S/mi', $content) === 1;
+}
+
+function databaseHasInstallation(array $db): bool
+{
+    mysqli_report(MYSQLI_REPORT_OFF);
+    $connection = @new mysqli($db['host'], $db['user'], $db['password'], $db['name']);
+
+    if ($connection->connect_errno) {
+        fail(
+            "Datenbank {$db['name']} auf {$db['host']} nicht erreichbar: {$connection->connect_error}. "
+            . 'Start abgebrochen, damit kein Installer vor einer moeglicherweise gefuellten Datenbank erscheint.'
+        );
+    }
+
+    $result = @$connection->query("SELECT COUNT(*) FROM versions WHERE current = 1 AND product = 'ojs2'");
+
+    if ($result === false) {
+        $errno = $connection->errno;
+        $error = $connection->error;
+        $connection->close();
+
+        if ($errno === ER_NO_SUCH_TABLE) {
+            // Fehler 1146 heisst nur "keine Tabelle versions". Als leer gilt die
+            // Datenbank erst, wenn sie ueberhaupt keine Tabellen enthaelt. Sonst
+            // koennte hinter einem falschen Datenbanknamen oder einem halb
+            // eingespielten Dump fremder Bestand stehen.
+            return !databaseIsEmpty($db);
+        }
+
+        fail("Abfrage der Tabelle \"versions\" fehlgeschlagen (Fehler {$errno}): {$error}. Start abgebrochen.");
+    }
+
+    $count = (int) $result->fetch_row()[0];
+    $connection->close();
+
+    if ($count > 0) {
+        return true;
+    }
+
+    if (env('OJS_ALLOW_INSTALLER', '0') === '1') {
+        info('Tabelle "versions" ohne aktuelle OJS-Version - per OJS_ALLOW_INSTALLER=1 freigegeben.');
+        return false;
+    }
+
+    fail(
+        'Die Tabelle "versions" existiert, enthaelt aber keine aktuelle OJS-Version. '
+        . 'Die Datenbank ist halb initialisiert oder gehoert einer anderen Anwendung. '
+        . 'Start abgebrochen, damit der Installer sie nicht ueberschreibt. '
+        . 'Ist der Installer hier wirklich gewollt: OJS_ALLOW_INSTALLER=1 setzen.'
+    );
 }
 
 /**
@@ -112,6 +245,13 @@ if (filter_var($mailFrom, FILTER_VALIDATE_EMAIL) === false) {
     fail("MAIL_FROM_ADDRESS ist keine gueltige E-Mail-Adresse: {$mailFrom}");
 }
 
+$dbConfig = [
+    'host' => env('OJS_DB_HOST', 'ojs-db'),
+    'user' => env('OJS_DB_USER', 'ojs'),
+    'password' => env('OJS_DB_PASSWORD'),
+    'name' => env('OJS_DB_NAME', 'ojs'),
+];
+
 $settings = [
     ['general', 'base_url', quoted($baseUrl)],
     // Gleiches Format wie der Web-Installer, sonst wechselt die Zeile bei jedem Start
@@ -121,10 +261,10 @@ $settings = [
     ['general', 'time_zone', quoted(env('TZ', 'Europe/Berlin'))],
 
     ['database', 'driver', 'mysqli'],
-    ['database', 'host', quoted(env('OJS_DB_HOST', 'ojs-db'))],
-    ['database', 'username', quoted(env('OJS_DB_USER', 'ojs'))],
-    ['database', 'password', quoted(env('OJS_DB_PASSWORD'))],
-    ['database', 'name', quoted(env('OJS_DB_NAME', 'ojs'))],
+    ['database', 'host', quoted($dbConfig['host'])],
+    ['database', 'username', quoted($dbConfig['user'])],
+    ['database', 'password', quoted($dbConfig['password'])],
+    ['database', 'name', quoted($dbConfig['name'])],
 
     ['files', 'files_dir', quoted('/var/www/files')],
 
@@ -185,4 +325,33 @@ if ($newContent !== $content) {
 }
 
 $installed = preg_match('/^\s*installed\s*=\s*On\b/mi', $newContent) === 1;
+
+// --- Bestehende Installation erkennen ------------------------------------------
+// Geht die config.inc.php verloren (z. B. weil sie nur im Container lag), steht
+// installed = Off, obwohl die Datenbank vollstaendig ist. OJS zeigt dann den
+// Installer - und wer ihn abschickt, ueberschreibt den Bestand. Deshalb pruefen wir
+// die Datenbank und markieren die Installation wieder als vorhanden.
+if (!$installed && databaseHasInstallation($dbConfig)) {
+    info('Datenbank enthaelt bereits eine OJS-Installation - setze installed = On.');
+    setIniValue($lines, 'general', 'installed', 'On');
+    $newContent = implode("\n", $lines) . "\n";
+    if (file_put_contents($configFile, $newContent, LOCK_EX) === false) {
+        fail("Konnte {$configFile} nicht schreiben.");
+    }
+    $installed = true;
+}
+
+// Ohne app_key startet OJS 3.5 nicht. Bei verlorener Config fehlt er.
+if ($installed && !hasAppKey($configFile)) {
+    info('Kein app_key vorhanden - erzeuge einen neuen (Nutzer muessen sich neu anmelden).');
+    exec('php /var/www/html/lib/pkp/tools/appKey.php generate --force 2>&1', $output, $status);
+
+    // appKey.php faengt Fehler beim Erzeugen und Schreiben selbst ab und endet
+    // trotzdem mit Status 0. Verlassen koennen wir uns nur auf das Ergebnis in
+    // der Datei, deshalb lesen wir sie neu ein und pruefen den Schluessel.
+    if ($status !== 0 || !hasAppKey($configFile)) {
+        fail('app_key konnte nicht erzeugt werden: ' . trim(implode(' ', $output)));
+    }
+}
+
 info('Status: ' . ($installed ? 'installiert' : "NICHT installiert – Web-Installer unter {$baseUrl} aufrufen"));

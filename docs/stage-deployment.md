@@ -45,7 +45,7 @@ Beim Start setzt `ojs-app` die umgebungsabhängigen Werte der `config.inc.php` a
 - **Mail-Absender:** DMARC-konform über `MAIL_FROM_ADDRESS`.
 - **Runner:** Die eingebauten Job- und Task-Runner sind aus, weil die Worker-Container diese Arbeit übernehmen.
 
-`installed` und `app_key` bleiben unberührt. Alle übrigen Werte werden bei jedem Start neu geschrieben, auch leer. Entfernst du also `MAIL_USERNAME` aus dem Stack, verschwinden Benutzername und Passwort auch aus der Config.
+`installed` und `app_key` bleiben unberührt, solange sie stimmen. Nur wenn die Datenbank bereits eine Installation enthält, die Konfiguration aber `installed = Off` meldet, stellt das Skript beides wieder her (siehe [Selbstheilung nach Config-Verlust](production-deployment.md#selbstheilung-nach-config-verlust)). Alle übrigen Werte werden bei jedem Start neu geschrieben, auch leer. Entfernst du also `MAIL_USERNAME` aus dem Stack, verschwinden Benutzername und Passwort auch aus der Config.
 
 `ojs-app` vergleicht beim Start die Code- mit der Datenbankversion und handelt je nach Richtung:
 
@@ -103,6 +103,7 @@ Lege in Portainer einen neuen Stack an: **Stacks → Add stack → Repository**.
 | `MAIL_FROM_ADDRESS` | nein | Absender, Standard `noreply@gfz-potsdam.de` |
 | `OJS_RUN_UPGRADE` | nein | `1` (Standard) = DB-Upgrade automatisch beim Start |
 | `OJS_WORKER_WAIT_SECONDS` | nein | Wartetakt von Queue und Scheduler, Standard `30` Sekunden |
+| `OJS_ALLOW_INSTALLER` | nein | `1` erlaubt den Installer auch bei halb initialisierter Datenbank (Standard `0`, siehe [Selbstheilung](production-deployment.md#selbstheilung-nach-config-verlust)) |
 | `OJS_STAGE_APP_IMAGE` | nein | nur für einen Rollback (siehe unten) |
 
 Die DB-Passwörter dürfen nach dem ersten Start **nicht mehr geändert** werden, ohne sie auch in MariaDB zu ändern. MariaDB übernimmt sie nur bei der Initialisierung.

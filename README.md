@@ -10,7 +10,9 @@ Lokale Docker-Umgebung für [Open Journal Systems](https://github.com/pkp/ojs) a
 
 Die Umgebung ist eigenständig: Sie hat ein eigenes Netzwerk und keinen Reverse-Proxy. Alle Ports sind nur an `127.0.0.1` gebunden.
 
-> **Stage:** Jeder Merge nach `main` wird automatisch nach **https://ojs.rz-vm182.gfz.de** (nur im VPN) deployt. Ablauf, Einrichtung und Betrieb stehen in [docs/stage-deployment.md](docs/stage-deployment.md).
+> **Stage:** Jeder Merge nach `main` wird automatisch nach **https://ojs.rz-vm182.gfz.de** (nur im VPN) deployt. Siehe [docs/stage-deployment.md](docs/stage-deployment.md).
+>
+> **Produktion:** Ein veröffentlichter Release (`vX.Y.Z`) befördert genau den auf Stage erprobten Image-Digest nach **https://ojs.rz-vm499.gfz.de**. Siehe [docs/production-deployment.md](docs/production-deployment.md).
 
 ## Erstes Setup
 
@@ -179,12 +181,13 @@ Das Startskript des offiziellen Images (`pkp-pre-start`) versucht, Konfiguration
 |---|---|
 | `docker-compose.dev.yml` | lokaler Stack |
 | `docker-compose.stage.yml` | Stage-Stack (Vorlage, der Digest wird von CI in `deploy/stage` gepinnt) |
+| `docker-compose.prod.yml` | Produktions-Stack (Vorlage, Digest in `deploy/prod`, nutzt die Bestandsvolumes) |
 | `.env.example` / `.env` | Konfiguration (`.env` ist gitignored) |
 | `docker/ojs/Dockerfile` | offizielles Image + Debian-Updates, Targets `dev` (Xdebug) und `stage` |
 | `docker/ojs/php.ini` | PHP-Limits für dev und stage (Uploads bis 64 MB) |
 | `docker/ojs/xdebug.ini` | Xdebug-Einstellungen (Modus über `XDEBUG_MODE`) |
 | `docker/ojs/stage/` | Stage-Entrypoints, Config-Generator, Healthcheck, Proxy-Konfiguration |
-| `.github/workflows/` | `stage-checks.yml` (Gate) und `publish-stage-images.yml` (Deployment) |
+| `.github/workflows/` | `stage-checks.yml` (Gate), `publish-stage-images.yml` (Stage), `production-release-signal.yml` und `promote-production-release.yml` (Produktion) |
 | `.trivyignore` | bewusst akzeptierte Sicherheitsbefunde mit Ablaufdatum |
 | `docker/ojs/config.inc.php` | OJS-Konfiguration (generiert, gitignored, enthält Secrets) |
 | `scripts/setup-dev.ps1` | Setup, Code-Sync |
