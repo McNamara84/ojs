@@ -69,6 +69,11 @@ RUN sed -i '/<VirtualHost \*:443>/,/<\/VirtualHost>/d' /etc/apache2/conf-enabled
 # fs.protected_symlinks verbietet www-data sonst, einem root-eigenen Symlink zu folgen.
 
 USER www-data
-# Eigener Entrypoint statt pkp-start: dessen sed -i wuerde den Symlink durch
-# eine Datei im Container-Layer ersetzen (Config ginge beim Recreate verloren).
+# Eigener Start statt pkp-start: dessen sed -i wuerde den Symlink durch eine Datei
+# im Container-Layer ersetzen (Config ginge beim Recreate verloren).
+#
+# CMD genuegt dafuer: pkp-start haengt im Basis-Image am CMD ("${PKP_CMD}"), nicht am
+# ENTRYPOINT. Geerbt wird nur docker-php-entrypoint des offiziellen PHP-Images, das
+# lediglich "exec $@" ausfuehrt. Deshalb ENTRYPOINT bewusst unveraendert lassen -
+# so ersetzen die Worker ihren Ablauf weiterhin einfach per "command:".
 CMD ["ojs-stage-start"]
