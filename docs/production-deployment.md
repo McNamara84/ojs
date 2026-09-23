@@ -43,6 +43,8 @@ Beim Start prüft `ojs-configure`, ob die Datenbank bereits eine OJS-Installatio
 
 Damit kann der frühere Ausfall nicht erneut passieren: Vor einer gefüllten Datenbank erscheint nie wieder der Installer, den jemand versehentlich abschicken und damit den Bestand überschreiben könnte.
 
+Die Prüfung ist bewusst misstrauisch. Als leer gilt die Datenbank nur, wenn die Abfrage erfolgreich war und die Tabelle `versions` fehlt. Jeder andere Fehler, etwa eine nicht erreichbare Datenbank oder fehlende Rechte, bricht den Start ab und wird im Log genannt. Der Container startet dann in einer Neustartschleife und liefert nichts aus. Das ist gewollt: Eine vorübergehende Störung würde sonst wie eine leere Datenbank aussehen, und der Installer wäre erreichbar.
+
 Ein neu erzeugter `app_key` bedeutet lediglich, dass sich alle Nutzer einmal neu anmelden müssen. Inhalte sind nicht betroffen.
 
 ## Einmalige Übernahme der Altinstanz
@@ -158,7 +160,8 @@ Zusätzlich sichern: `ojs_ojs_private` (Einreichungsdateien) und `ojs-prod-confi
 | Symptom | Ursache / Lösung |
 |---|---|
 | `ojs-prod-db` startet nicht, Log nennt Zugriffsfehler | Die Stack-Variablen weichen von den alten Zugangsdaten ab. MariaDB übernimmt sie bei bestehenden Daten nicht |
-| Es erscheint der Installer statt der Seite | Die Datenbank ist leer oder nicht erreichbar. **Nicht** abschicken. Erst Log von `ojs-prod-app` prüfen, dort steht der Verbindungsfehler |
+| `ojs-prod-app` startet nicht, Log: „Datenbank … nicht erreichbar … Start abgebrochen“ | Absicht. Solange die Konfiguration `installed = Off` meldet und die Datenbank nicht sicher als leer erkannt wird, startet der Container nicht, damit kein Installer vor einer gefüllten Datenbank erscheint. Zugangsdaten und Zustand von `ojs-prod-db` prüfen |
+| Es erscheint der Installer statt der Seite | Die Datenbank ist nachweislich leer (Tabelle `versions` fehlt). **Nicht** abschicken, sondern prüfen, ob das richtige Volume eingebunden ist |
 | `ojs-prod-app` bleibt *unhealthy* | Datenbank-Upgrade fehlgeschlagen. Log prüfen, notfalls Backup einspielen |
 | Traefik antwortet mit 404 | Container hängt nicht im Netzwerk `traefik` oder das Label `traefik.enable=true` fehlt |
 | `deploy/prod` bewegt sich nicht | Läufe von „Promote Production Release“ prüfen. Blockiert wird unter anderem, wenn es für den Release-Commit keinen `deploy/stage`-Commit gibt |

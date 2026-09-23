@@ -61,21 +61,49 @@ function quoted(string $value): string
  * Prueft, ob die Datenbank bereits eine OJS-Installation enthaelt.
  *
  * Entscheidend ist eine aktuelle Version des Produkts in der Tabelle "versions";
- * die legt erst der Installer bzw. das Upgrade an. Ist die Datenbank leer oder nicht
- * erreichbar, liefert die Funktion false und der Web-Installer bleibt zustaendig.
+ * die legt erst der Installer bzw. das Upgrade an.
+ *
+ * Diese Funktion schlaegt im Zweifel fehl (fail closed): Nur eine erfolgreiche
+ * Abfrage ohne Treffer gilt als leere Datenbank. Jeder andere Fehler - keine
+ * Verbindung, fehlende Rechte, defekte Tabelle - bricht den Start ab. Sonst wuerde
+ * eine voruebergehende Stoerung wie eine leere Datenbank aussehen, und OJS wuerde
+ * den Installer anzeigen (er rendert auch ohne Datenbank). Wer ihn dann abschickt,
+ * ueberschreibt den Bestand. Ein abgebrochener Start ist die harmlosere Variante:
+ * Der Container wird neu gestartet und meldet den Fehler im Log.
+ *
+ * Einzige Ausnahme ist die fehlende Tabelle "versions" (MySQL-Fehler 1146). Das ist
+ * der normale Zustand einer frischen Datenbank, und dann ist der Installer richtig.
  */
+const ER_NO_SUCH_TABLE = 1146;
+
 function databaseHasInstallation(array $db): bool
 {
     mysqli_report(MYSQLI_REPORT_OFF);
     $connection = @new mysqli($db['host'], $db['user'], $db['password'], $db['name']);
 
     if ($connection->connect_errno) {
-        info("Datenbank nicht erreichbar ({$connection->connect_error}) - Installationsstatus unveraendert.");
-        return false;
+        fail(
+            "Datenbank {$db['name']} auf {$db['host']} nicht erreichbar: {$connection->connect_error}. "
+            . 'Start abgebrochen, damit kein Installer vor einer moeglicherweise gefuellten Datenbank erscheint.'
+        );
     }
 
     $result = @$connection->query("SELECT COUNT(*) FROM versions WHERE current = 1 AND product = 'ojs2'");
-    $count = $result ? (int) $result->fetch_row()[0] : 0;
+
+    if ($result === false) {
+        $errno = $connection->errno;
+        $error = $connection->error;
+        $connection->close();
+
+        if ($errno === ER_NO_SUCH_TABLE) {
+            info('Tabelle "versions" fehlt - Datenbank ist leer, der Web-Installer ist zustaendig.');
+            return false;
+        }
+
+        fail("Abfrage der Tabelle \"versions\" fehlgeschlagen (Fehler {$errno}): {$error}. Start abgebrochen.");
+    }
+
+    $count = (int) $result->fetch_row()[0];
     $connection->close();
 
     return $count > 0;
