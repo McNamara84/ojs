@@ -1,10 +1,13 @@
 #!/bin/sh
 # Entrypoint fuer ojs-queue und ojs-scheduler (Stage).
-# Wartet, bis OJS per Web-Installer installiert wurde, und startet dann den Worker.
+# Wartet, bis OJS installiert UND die Datenbank auf dem Stand des Codes ist, und
+# startet dann den Worker. Ohne diese Wartezeit starten die Worker waehrend der
+# Installation oder eines laufenden DB-Upgrades und sterben im Bootstrap.
 set -eu
 
 CONFIG=/var/www/config/config.inc.php
 ROLE="${1:-}"
+WAIT_SECONDS="${OJS_WORKER_WAIT_SECONDS:-30}"
 
 case "$ROLE" in
     jobs | scheduler) ;;
@@ -14,13 +17,22 @@ case "$ROLE" in
         ;;
 esac
 
-until grep -Eq '^[[:space:]]*installed[[:space:]]*=[[:space:]]*On' "$CONFIG" 2>/dev/null; do
-    echo "[ojs-worker:$ROLE] OJS ist noch nicht installiert - pruefe erneut in 30 s."
-    sleep 30
+cd /var/www/html
+
+while :; do
+    if ! grep -Eq '^[[:space:]]*installed[[:space:]]*=[[:space:]]*On' "$CONFIG" 2>/dev/null; then
+        echo "[ojs-worker:$ROLE] OJS ist noch nicht installiert - warte ${WAIT_SECONDS}s."
+    elif ! versions="$(php /usr/local/lib/ojs/ojs-version-check.php 2>/dev/null)"; then
+        echo "[ojs-worker:$ROLE] Anwendung noch nicht bereit - warte ${WAIT_SECONDS}s."
+    elif [ "${versions% *}" != "${versions#* }" ]; then
+        echo "[ojs-worker:$ROLE] DB-Upgrade laeuft (${versions#* } -> ${versions% *}) - warte ${WAIT_SECONDS}s."
+    else
+        break
+    fi
+    sleep "$WAIT_SECONDS"
 done
 
 echo "[ojs-worker:$ROLE] Starte."
-cd /var/www/html
 
 if [ "$ROLE" = "jobs" ]; then
     # --max-time: Worker endet stuendlich und wird per restart-Policy frisch gestartet

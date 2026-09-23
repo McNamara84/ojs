@@ -50,7 +50,7 @@ USER root
 COPY stage/reverse-proxy.conf /etc/apache2/conf-enabled/zz-reverse-proxy.conf
 COPY stage/php-stage.ini /usr/local/etc/php/conf.d/zz-ojs-stage.ini
 COPY --chmod=0755 stage/ojs-stage-start stage/ojs-worker stage/ojs-healthcheck /usr/local/bin/
-COPY stage/ojs-configure.php /usr/local/lib/ojs/ojs-configure.php
+COPY stage/ojs-configure.php stage/ojs-version-check.php /usr/local/lib/ojs/
 
 # TLS terminiert Traefik. Der 443-VHost braucht Zertifikate, die sonst pkp-pre-start
 # erzeugt (auf Stage nicht genutzt) - daher entfernen und mod_ssl abschalten.

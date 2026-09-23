@@ -2,8 +2,9 @@
 # OJS Stage – https://ojs.rz-vm182.gfz.de (nur im VPN)
 # =============================================================================
 # Diese Datei auf main ist eine VORLAGE: "Publish Stage Images" ersetzt jeden
-# Marker ghcr.io/mcnamara84/ojs-app:deployment-template durch den exakt gebauten
-# Digest und committet das Ergebnis nach deploy/stage. Portainer folgt deploy/stage.
+# Image-Marker mit dem Tag "deployment-template" (genau 3: app, queue, scheduler)
+# durch den exakt gebauten Digest und committet das Ergebnis nach deploy/stage.
+# Portainer folgt deploy/stage.
 #
 # Stack-Variablen (Portainer): OJS_DB_PASSWORD, OJS_DB_ROOT_PASSWORD,
 #   MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_ENCRYPTION, MAIL_FROM_ADDRESS

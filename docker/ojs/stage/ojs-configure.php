@@ -86,7 +86,7 @@ function setIniValue(array &$lines, string $section, string $key, string $value)
         }
     }
 
-    $newLine = "{$key} = {$value}";
+    $newLine = rtrim("{$key} = {$value}");
     if ($active !== null) {
         $lines[$active] = $newLine;
     } elseif ($commented !== null) {
@@ -146,14 +146,14 @@ $settings = [
     ['debug', 'show_stacktrace', 'Off'],
 ];
 
+// Diese Schluessel werden immer geschrieben, auch leer: Ein leerer Wert liest sich in
+// OJS als null (Laravel setzt dann weder Verschluesselung noch Zugangsdaten). Wuerden
+// sie nur bedingt gesetzt, bliebe nach dem Entfernen einer Variablen der alte Wert in
+// der persistenten config.inc.php aktiv.
 $mailUser = env('MAIL_USERNAME', '');
-if ($mailEncryption !== 'none') {
-    $settings[] = ['email', 'smtp_auth', $mailEncryption];
-}
-if ($mailUser !== '') {
-    $settings[] = ['email', 'smtp_username', quoted($mailUser)];
-    $settings[] = ['email', 'smtp_password', quoted(env('MAIL_PASSWORD'))];
-}
+$settings[] = ['email', 'smtp_auth', $mailEncryption === 'none' ? '' : $mailEncryption];
+$settings[] = ['email', 'smtp_username', $mailUser === '' ? '' : quoted($mailUser)];
+$settings[] = ['email', 'smtp_password', $mailUser === '' ? '' : quoted(env('MAIL_PASSWORD'))];
 
 // --- Config-Datei erzeugen bzw. laden -----------------------------------------
 if (!is_file($configFile)) {

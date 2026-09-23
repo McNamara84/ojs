@@ -9,15 +9,14 @@ php /usr/local/lib/ojs/ojs-configure.php --config="$CONFIG"
 if grep -Eq '^[[:space:]]*installed[[:space:]]*=[[:space:]]*On' "$CONFIG"; then
     if [ "${OJS_RUN_UPGRADE:-1}" = "1" ]; then
         # Analog ERNIE_RUN_MIGRATIONS: nur upgraden, wenn der Code neuer ist als die DB.
-        versions="$(php tools/upgrade.php check 2>/dev/null || true)"
-        code_version="$(printf '%s\n' "$versions" | sed -n 's/^Code version:[[:space:]]*//p')"
-        db_version="$(printf '%s\n' "$versions" | sed -n 's/^Database version:[[:space:]]*//p')"
-
-        if [ -z "$code_version" ] || [ -z "$db_version" ]; then
-            echo "[ojs-stage-start] FEHLER: Versionen nicht ermittelbar:" >&2
-            printf '%s\n' "$versions" >&2
+        # Rein lokaler Vergleich, ohne Abruf der Versionsdatei von pkp.sfu.ca.
+        if ! versions="$(php /usr/local/lib/ojs/ojs-version-check.php)"; then
+            echo "[ojs-stage-start] FEHLER: Versionsvergleich fehlgeschlagen." >&2
             exit 1
         fi
+
+        code_version="${versions% *}"
+        db_version="${versions#* }"
 
         if [ "$code_version" != "$db_version" ]; then
             echo "[ojs-stage-start] Upgrade der Datenbank von $db_version auf $code_version ..."
