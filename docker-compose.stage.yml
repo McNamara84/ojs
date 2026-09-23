@@ -15,7 +15,7 @@
 
 services:
   ojs-app:
-    image: "${OJS_STAGE_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app:deployment-template}"
+    image: "${OJS_STAGE_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app@sha256:b81d0cc266035dfe1a50379e3751fd5fdea9843a701e582e42af19775e55a6cc}"
     pull_policy: always
     container_name: ojs-stage-app
     restart: unless-stopped
@@ -61,7 +61,7 @@ services:
       - "traefik.docker.network=traefik"
 
   ojs-queue:
-    image: "${OJS_STAGE_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app:deployment-template}"
+    image: "${OJS_STAGE_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app@sha256:b81d0cc266035dfe1a50379e3751fd5fdea9843a701e582e42af19775e55a6cc}"
     pull_policy: always
     container_name: ojs-stage-queue
     restart: unless-stopped
@@ -80,7 +80,7 @@ services:
         condition: service_healthy
 
   ojs-scheduler:
-    image: "${OJS_STAGE_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app:deployment-template}"
+    image: "${OJS_STAGE_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app@sha256:b81d0cc266035dfe1a50379e3751fd5fdea9843a701e582e42af19775e55a6cc}"
     pull_policy: always
     container_name: ojs-stage-scheduler
     restart: unless-stopped
