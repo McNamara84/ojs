@@ -125,6 +125,14 @@ function databaseIsEmpty(array $db): bool
     );
 }
 
+/** Liest die Config frisch von der Platte und prueft, ob ein app_key gesetzt ist. */
+function hasAppKey(string $configFile): bool
+{
+    $content = @file_get_contents($configFile);
+
+    return is_string($content) && preg_match('/^\s*app_key\s*=\s*"?base64:\S/mi', $content) === 1;
+}
+
 function databaseHasInstallation(array $db): bool
 {
     mysqli_report(MYSQLI_REPORT_OFF);
@@ -334,11 +342,15 @@ if (!$installed && databaseHasInstallation($dbConfig)) {
 }
 
 // Ohne app_key startet OJS 3.5 nicht. Bei verlorener Config fehlt er.
-if ($installed && !preg_match('/^\s*app_key\s*=\s*"?base64:/mi', $newContent)) {
+if ($installed && !hasAppKey($configFile)) {
     info('Kein app_key vorhanden - erzeuge einen neuen (Nutzer muessen sich neu anmelden).');
     exec('php /var/www/html/lib/pkp/tools/appKey.php generate --force 2>&1', $output, $status);
-    if ($status !== 0) {
-        fail('app_key konnte nicht erzeugt werden: ' . implode(' ', $output));
+
+    // appKey.php faengt Fehler beim Erzeugen und Schreiben selbst ab und endet
+    // trotzdem mit Status 0. Verlassen koennen wir uns nur auf das Ergebnis in
+    // der Datei, deshalb lesen wir sie neu ein und pruefen den Schluessel.
+    if ($status !== 0 || !hasAppKey($configFile)) {
+        fail('app_key konnte nicht erzeugt werden: ' . trim(implode(' ', $output)));
     }
 }
 
