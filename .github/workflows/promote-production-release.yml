@@ -32,6 +32,7 @@ jobs:
       contents: read
     outputs:
       app_image: ${{ steps.source.outputs.app_image }}
+      emtf_image: ${{ steps.source.outputs.emtf_image }}
       checks_ready: ${{ steps.deployment-checks.outputs.ready }}
       current: ${{ steps.source.outputs.current }}
       release_id: ${{ steps.release.outputs.id }}
@@ -160,6 +161,7 @@ jobs:
             echo "current=$CURRENT"
             echo "sha=$SOURCE_SHA"
             echo "app_image=ghcr.io/${OWNER}/ojs-app"
+            echo "emtf_image=ghcr.io/${OWNER}/ojs-emtf"
           } >> "$GITHUB_OUTPUT"
 
       - name: Require successful deployment checks
@@ -239,6 +241,7 @@ jobs:
       packages: read
     outputs:
       app_digest: ${{ steps.artifacts.outputs.app_digest }}
+      emtf_digest: ${{ steps.artifacts.outputs.emtf_digest }}
       current: ${{ steps.latest.outputs.current }}
 
     steps:
@@ -259,6 +262,7 @@ jobs:
         id: artifacts
         env:
           APP_IMAGE: ${{ needs.validate.outputs.app_image }}
+          EMTF_IMAGE: ${{ needs.validate.outputs.emtf_image }}
           SOURCE_SHA: ${{ needs.validate.outputs.sha }}
           # Nur fuer "compose config" (Pflichtvariablen); Portainer liefert die echten Werte.
           OJS_DB_PASSWORD: ci-dummy
@@ -316,11 +320,21 @@ jobs:
             fi
           done
 
-          # Das Manifest muss weiterhin existieren, sonst zeigt deploy/prod ins Leere.
+          EMTF_REF="$(jq -r '.services["ojs-emtf"].image' <<< "$STAGE_CONFIG")"
+          EMTF_DIGEST="${EMTF_REF#"${EMTF_IMAGE}@"}"
+
+          if [[ "$EMTF_REF" != "${EMTF_IMAGE}@${EMTF_DIGEST}" || ! "$EMTF_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Invalid Stage EMTF image reference: $EMTF_REF" >&2
+            exit 1
+          fi
+
+          # Die Manifeste muessen weiterhin existieren, sonst zeigt deploy/prod ins Leere.
           docker buildx imagetools inspect "$APP_REF" >/dev/null
+          docker buildx imagetools inspect "$EMTF_REF" >/dev/null
 
           {
             echo "app_digest=$APP_DIGEST"
+            echo "emtf_digest=$EMTF_DIGEST"
             echo "stage_commit=$STAGE_DEPLOY_COMMIT"
           } >> "$GITHUB_OUTPUT"
 
@@ -330,34 +344,39 @@ jobs:
       - name: Scan the exact promoted image digest
         env:
           APP_IMAGE_REF: ${{ needs.validate.outputs.app_image }}@${{ steps.artifacts.outputs.app_digest }}
+          EMTF_IMAGE_REF: ${{ needs.validate.outputs.emtf_image }}@${{ steps.artifacts.outputs.emtf_digest }}
           TRIVY_DISABLE_VEX_NOTICE: 'true'
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
           TRIVY_USERNAME: ${{ github.actor }}
         run: |
           set -euo pipefail
 
-          if [[ ! "$APP_IMAGE_REF" =~ @sha256:[0-9a-f]{64}$ ]]; then
-            echo "Invalid Production image reference: $APP_IMAGE_REF" >&2
-            exit 1
-          fi
+          for image_ref in "$APP_IMAGE_REF" "$EMTF_IMAGE_REF"; do
+            if [[ ! "$image_ref" =~ @sha256:[0-9a-f]{64}$ ]]; then
+              echo "Invalid Production image reference: $image_ref" >&2
+              exit 1
+            fi
 
-          docker run --rm \
-            -e TRIVY_DISABLE_VEX_NOTICE \
-            -e TRIVY_PASSWORD \
-            -e TRIVY_USERNAME \
-            -v "${{ runner.temp }}/trivy-cache:/root/.cache/trivy" \
-            -v "$PWD/.trivyignore:/work/.trivyignore:ro" \
-            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image \
-            --cache-dir /root/.cache/trivy \
-            --ignorefile /work/.trivyignore \
-            --scanners vuln \
-            --format table \
-            --exit-code 1 \
-            --ignore-unfixed \
-            --pkg-types os,library \
-            --severity CRITICAL,HIGH \
-            --skip-version-check \
-            "$APP_IMAGE_REF"
+            echo "::group::Trivy $image_ref"
+            docker run --rm \
+              -e TRIVY_DISABLE_VEX_NOTICE \
+              -e TRIVY_PASSWORD \
+              -e TRIVY_USERNAME \
+              -v "${{ runner.temp }}/trivy-cache:/root/.cache/trivy" \
+              -v "$PWD/.trivyignore:/work/.trivyignore:ro" \
+              aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image \
+              --cache-dir /root/.cache/trivy \
+              --ignorefile /work/.trivyignore \
+              --scanners vuln \
+              --format table \
+              --exit-code 1 \
+              --ignore-unfixed \
+              --pkg-types os,library \
+              --severity CRITICAL,HIGH \
+              --skip-version-check \
+              "$image_ref"
+            echo "::endgroup::"
+          done
 
       - name: Confirm that the release is still latest
         id: latest
@@ -404,6 +423,8 @@ jobs:
         env:
           APP_DIGEST: ${{ needs.inspect.outputs.app_digest }}
           APP_IMAGE: ${{ needs.validate.outputs.app_image }}
+          EMTF_DIGEST: ${{ needs.inspect.outputs.emtf_digest }}
+          EMTF_IMAGE: ${{ needs.validate.outputs.emtf_image }}
           RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
           SOURCE_SHA: ${{ needs.validate.outputs.sha }}
           # Nur fuer "compose config" (Pflichtvariablen); Portainer liefert die echten Werte.
@@ -413,27 +434,32 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ ! "$APP_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "Invalid application image digest: $APP_DIGEST" >&2
-            exit 1
-          fi
+          for digest in "$APP_DIGEST" "$EMTF_DIGEST"; do
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Invalid image digest: $digest" >&2
+              exit 1
+            fi
+          done
 
           APP_TEMPLATE="${APP_IMAGE}:deployment-template"
+          EMTF_TEMPLATE="${EMTF_IMAGE}:deployment-template"
           PROD_COMPOSE="${RUNNER_TEMP}/docker-compose.prod.yml"
 
           git cat-file -e "${SOURCE_SHA}^{commit}"
           git show "${SOURCE_SHA}:docker-compose.prod.yml" > "$PROD_COMPOSE"
 
           APP_TEMPLATE_COUNT="$(grep -Fc "$APP_TEMPLATE" "$PROD_COMPOSE")"
+          EMTF_TEMPLATE_COUNT="$(grep -Fc "$EMTF_TEMPLATE" "$PROD_COMPOSE")"
 
-          if [[ "$APP_TEMPLATE_COUNT" -ne 3 ]]; then
-            echo "Unexpected Production image template count: app=$APP_TEMPLATE_COUNT" >&2
+          if [[ "$APP_TEMPLATE_COUNT" -ne 3 || "$EMTF_TEMPLATE_COUNT" -ne 1 ]]; then
+            echo "Unexpected Production image template count: app=$APP_TEMPLATE_COUNT emtf=$EMTF_TEMPLATE_COUNT" >&2
             exit 1
           fi
 
           sed -i "s|${APP_TEMPLATE}|${APP_IMAGE}@${APP_DIGEST}|g" "$PROD_COMPOSE"
+          sed -i "s|${EMTF_TEMPLATE}|${EMTF_IMAGE}@${EMTF_DIGEST}|g" "$PROD_COMPOSE"
 
-          if grep -Fq "$APP_TEMPLATE" "$PROD_COMPOSE"; then
+          if grep -Fq "$APP_TEMPLATE" "$PROD_COMPOSE" || grep -Fq "$EMTF_TEMPLATE" "$PROD_COMPOSE"; then
             echo "Production image templates remain after digest pinning." >&2
             exit 1
           fi

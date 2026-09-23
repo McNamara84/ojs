@@ -1,0 +1,44 @@
+<style>
+#headerLogo {
+    background-color: white;
+}
+#headerText{
+	text-align:center;
+	font-family: verdana;
+	font-size: 100%;
+}
+
+#mainPageText{
+	color: black;
+	font-family: verdana;
+	text-align: center;
+}
+#linkSection{
+	color: black;
+	font-family: verdana;
+	background-color: white;
+	text-align:center;
+	text-decoration:none;
+}
+#linkSectionContent{
+	color: black;
+	font-family: verdana;
+	background-color: white;
+	text-align:left;
+	text-decoration:none;
+	margin-left:20%;
+	}
+img{
+	display:block;
+	margin: 0 auto;
+}
+a{
+	font-size:125%;
+	text-decoration:underline;
+	color: black;
+	}
+	
+p{
+	font-size:100%;
+	}
+</style>
