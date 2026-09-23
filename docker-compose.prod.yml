@@ -10,7 +10,7 @@
 #
 # WICHTIG - Uebernahme der Altinstanz:
 #   Die Volumes ojs_db_data, ojs_ojs_private und ojs_ojs_public stammen aus dem
-#   fruehereren Stack "ojs" und werden weiterverwendet (external). Deshalb muessen
+#   frueheren Stack "ojs" und werden weiterverwendet (external). Deshalb muessen
 #   OJS_DB_NAME, OJS_DB_USER und OJS_DB_PASSWORD exakt den Werten des alten Stacks
 #   entsprechen: MariaDB legt Benutzer und Passwoerter nur bei der ersten
 #   Initialisierung an und ignoriert die Variablen bei bestehenden Daten.

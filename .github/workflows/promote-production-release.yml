@@ -235,6 +235,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Fuer GHCR-Login, "imagetools inspect" und den Trivy-Scan des Digests.
+      packages: read
     outputs:
       app_digest: ${{ steps.artifacts.outputs.app_digest }}
       current: ${{ steps.latest.outputs.current }}

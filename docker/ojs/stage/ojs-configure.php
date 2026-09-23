@@ -5,8 +5,15 @@
  *
  * Laeuft bei jedem Start von ojs-app und ist idempotent:
  *  - fehlt config.inc.php im Volume, wird sie aus config.TEMPLATE.inc.php erzeugt;
- *  - DB, Mail, URL usw. werden aus Umgebungsvariablen gesetzt;
- *  - "installed" und "app_key" werden NIE angefasst (gehoeren dem Web-Installer).
+ *  - DB, Mail, URL usw. werden aus Umgebungsvariablen gesetzt.
+ *
+ * Sonderfall "installed" und "app_key": Normalerweise gehoeren beide dem
+ * Web-Installer und werden nicht angefasst. Enthaelt die Datenbank jedoch bereits
+ * eine Installation, waehrend die Konfiguration "installed = Off" meldet (typisch
+ * nach einem Verlust der config.inc.php), stellt dieses Skript beides wieder her:
+ * es setzt "installed = On" und erzeugt bei Bedarf einen neuen "app_key". Sonst
+ * wuerde OJS den Installer zeigen, und wer ihn abschickt, ueberschreibt den
+ * Datenbestand. Siehe Abschnitt "Bestehende Installation erkennen" weiter unten.
  *
  * Aufruf: php ojs-configure.php [--config=/pfad/config.inc.php]
  */
