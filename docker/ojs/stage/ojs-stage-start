@@ -1,0 +1,50 @@
+#!/bin/sh
+# Entrypoint fuer ojs-app (Stage): Config setzen -> ggf. DB-Upgrade -> Apache.
+set -eu
+
+CONFIG=/var/www/config/config.inc.php
+
+php /usr/local/lib/ojs/ojs-configure.php --config="$CONFIG"
+
+if grep -Eq '^[[:space:]]*installed[[:space:]]*=[[:space:]]*On' "$CONFIG"; then
+    if [ "${OJS_RUN_UPGRADE:-1}" = "1" ]; then
+        # Analog ERNIE_RUN_MIGRATIONS: nur upgraden, wenn der Code neuer ist als die DB.
+        # Rein lokaler Vergleich, ohne Abruf der Versionsdatei von pkp.sfu.ca.
+        if ! versions="$(php /usr/local/lib/ojs/ojs-version-check.php)"; then
+            echo "[ojs-stage-start] FEHLER: Versionsvergleich fehlgeschlagen." >&2
+            exit 1
+        fi
+
+        # shellcheck disable=SC2086 # absichtliches Wort-Splitting: "code db richtung"
+        set -- $versions
+        code_version="$1"
+        db_version="$2"
+        direction="$3"
+
+        case "$direction" in
+            db-older)
+                echo "[ojs-stage-start] Upgrade der Datenbank von $db_version auf $code_version ..."
+                php tools/upgrade.php upgrade
+                ;;
+            equal)
+                echo "[ojs-stage-start] Datenbank ist aktuell ($db_version)."
+                ;;
+            db-newer)
+                # Typisch nach einem Image-Rollback. Ein Upgrade mit aelterem Code waere
+                # der falsche Migrationspfad, ein Downgrade kann OJS nicht.
+                echo "[ojs-stage-start] FEHLER: Die Datenbank ($db_version) ist neuer als der Code ($code_version)." >&2
+                echo "[ojs-stage-start] Passendes Image deployen (OJS_STAGE_APP_IMAGE) oder das zugehoerige DB-Backup zurueckspielen." >&2
+                echo "[ojs-stage-start] Zum bewussten Starten trotz Abweichung: OJS_RUN_UPGRADE=0 setzen." >&2
+                exit 1
+                ;;
+            *)
+                echo "[ojs-stage-start] FEHLER: Unerwartete Versionsangabe: $versions" >&2
+                exit 1
+                ;;
+        esac
+    else
+        echo "[ojs-stage-start] OJS_RUN_UPGRADE=0 - automatisches Upgrade uebersprungen."
+    fi
+fi
+
+exec apache2-foreground

@@ -1,0 +1,53 @@
+#!/bin/sh
+# Entrypoint fuer ojs-queue und ojs-scheduler (Stage).
+# Wartet, bis OJS installiert UND die Datenbank auf dem Stand des Codes ist, und
+# startet dann den Worker. Ohne diese Wartezeit starten die Worker waehrend der
+# Installation oder eines laufenden DB-Upgrades und sterben im Bootstrap.
+set -eu
+
+CONFIG=/var/www/config/config.inc.php
+ROLE="${1:-}"
+WAIT_SECONDS="${OJS_WORKER_WAIT_SECONDS:-30}"
+
+case "$ROLE" in
+    jobs | scheduler) ;;
+    *)
+        echo "Aufruf: ojs-worker jobs|scheduler" >&2
+        exit 64
+        ;;
+esac
+
+cd /var/www/html
+
+while :; do
+    if ! grep -Eq '^[[:space:]]*installed[[:space:]]*=[[:space:]]*On' "$CONFIG" 2>/dev/null; then
+        echo "[ojs-worker:$ROLE] OJS ist noch nicht installiert - warte ${WAIT_SECONDS}s."
+    elif ! versions="$(php /usr/local/lib/ojs/ojs-version-check.php 2>/dev/null)"; then
+        echo "[ojs-worker:$ROLE] Anwendung noch nicht bereit - warte ${WAIT_SECONDS}s."
+    else
+        # shellcheck disable=SC2086 # absichtliches Wort-Splitting: "code db richtung"
+        set -- $versions
+        case "$3" in
+            equal)
+                break
+                ;;
+            db-newer)
+                echo "[ojs-worker:$ROLE] Datenbank ($2) ist neuer als der Code ($1) - warte ${WAIT_SECONDS}s. Siehe Log von ojs-app."
+                ;;
+            *)
+                echo "[ojs-worker:$ROLE] DB-Upgrade laeuft ($2 -> $1) - warte ${WAIT_SECONDS}s."
+                ;;
+        esac
+    fi
+    sleep "$WAIT_SECONDS"
+done
+
+echo "[ojs-worker:$ROLE] Starte."
+
+if [ "$ROLE" = "jobs" ]; then
+    # --max-time: Worker endet stuendlich und wird per restart-Policy frisch gestartet
+    # (schuetzt vor Speicherlecks, analog PHP_FPM_MAX_REQUESTS bei ERNIE).
+    exec php lib/pkp/tools/jobs.php work --sleep=3 --tries=3 --timeout=300 --max-time=3600
+fi
+
+exec php lib/pkp/tools/scheduler.php work

@@ -1,0 +1,135 @@
+# =============================================================================
+# OJS Stage – https://ojs.rz-vm182.gfz.de (nur im VPN)
+# =============================================================================
+# Diese Datei auf main ist eine VORLAGE: "Publish Stage Images" ersetzt jeden
+# Image-Marker mit dem Tag "deployment-template" (genau 3: app, queue, scheduler)
+# durch den exakt gebauten Digest und committet das Ergebnis nach deploy/stage.
+# Portainer folgt deploy/stage.
+#
+# Stack-Variablen (Portainer): OJS_DB_PASSWORD, OJS_DB_ROOT_PASSWORD,
+#   MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_ENCRYPTION, MAIL_FROM_ADDRESS
+#   optional: OJS_RUN_UPGRADE, OJS_WORKER_WAIT_SECONDS, OJS_DB_NAME, OJS_DB_USER
+# Rollback: OJS_STAGE_APP_IMAGE=ghcr.io/mcnamara84/ojs-app@sha256:<digest>
+# Details: docs/stage-deployment.md
+# =============================================================================
+
+services:
+  ojs-app:
+    image: "${OJS_STAGE_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app:deployment-template}"
+    pull_policy: always
+    container_name: ojs-stage-app
+    restart: unless-stopped
+    # Das Image laeuft als www-data (rootless) und bindet trotzdem Port 80.
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
+    environment:
+      OJS_BASE_URL: https://ojs.rz-vm182.gfz.de
+      TZ: Europe/Berlin
+      OJS_DB_HOST: ojs-db
+      OJS_DB_NAME: ${OJS_DB_NAME:-ojs}
+      OJS_DB_USER: ${OJS_DB_USER:-ojs}
+      OJS_DB_PASSWORD: ${OJS_DB_PASSWORD:?OJS_DB_PASSWORD muss als Stack-Variable gesetzt sein}
+      MAIL_HOST: ${MAIL_HOST:?MAIL_HOST muss als Stack-Variable gesetzt sein}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_ENCRYPTION: ${MAIL_ENCRYPTION:-tls}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@gfz-potsdam.de}
+      OJS_RUN_UPGRADE: ${OJS_RUN_UPGRADE:-1}
+    volumes:
+      - ojs-config:/var/www/config
+      - ojs-files:/var/www/files
+      - ojs-public:/var/www/html/public
+    networks:
+      - ojs-stage-network
+      - traefik
+    depends_on:
+      ojs-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "ojs-healthcheck"]
+      interval: 10s
+      timeout: 8s
+      retries: 30
+      start_period: 60s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ojs-router.rule=Host(`ojs.rz-vm182.gfz.de`)"
+      - "traefik.http.routers.ojs-router.entrypoints=https"
+      - "traefik.http.routers.ojs-router.service=ojs-service"
+      - "traefik.http.services.ojs-service.loadbalancer.server.port=80"
+      - "traefik.docker.network=traefik"
+
+  ojs-queue:
+    image: "${OJS_STAGE_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app:deployment-template}"
+    pull_policy: always
+    container_name: ojs-stage-queue
+    restart: unless-stopped
+    command: ["ojs-worker", "jobs"]
+    environment:
+      TZ: Europe/Berlin
+      OJS_WORKER_WAIT_SECONDS: ${OJS_WORKER_WAIT_SECONDS:-30}
+    volumes:
+      - ojs-config:/var/www/config:ro
+      - ojs-files:/var/www/files
+      - ojs-public:/var/www/html/public
+    networks:
+      - ojs-stage-network
+    depends_on:
+      ojs-app:
+        condition: service_healthy
+
+  ojs-scheduler:
+    image: "${OJS_STAGE_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app:deployment-template}"
+    pull_policy: always
+    container_name: ojs-stage-scheduler
+    restart: unless-stopped
+    command: ["ojs-worker", "scheduler"]
+    environment:
+      TZ: Europe/Berlin
+      OJS_WORKER_WAIT_SECONDS: ${OJS_WORKER_WAIT_SECONDS:-30}
+    volumes:
+      - ojs-config:/var/www/config:ro
+      - ojs-files:/var/www/files
+      - ojs-public:/var/www/html/public
+    networks:
+      - ojs-stage-network
+    depends_on:
+      ojs-app:
+        condition: service_healthy
+
+  ojs-db:
+    image: mariadb:11.8.9@sha256:79d59758afc91b89b120b0a8904d637f5a3b3e1c4900f29b740d6d46c72fef68
+    container_name: ojs-stage-db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${OJS_DB_NAME:-ojs}
+      MARIADB_USER: ${OJS_DB_USER:-ojs}
+      MARIADB_PASSWORD: ${OJS_DB_PASSWORD:?OJS_DB_PASSWORD muss als Stack-Variable gesetzt sein}
+      MARIADB_ROOT_PASSWORD: ${OJS_DB_ROOT_PASSWORD:?OJS_DB_ROOT_PASSWORD muss als Stack-Variable gesetzt sein}
+      TZ: Europe/Berlin
+    command:
+      - --innodb-buffer-pool-size=${OJS_DB_INNODB_BUFFER_POOL_SIZE:-256M}
+      - --max-connections=${OJS_DB_MAX_CONNECTIONS:-40}
+    volumes:
+      - ojs-db-data:/var/lib/mysql
+    networks:
+      - ojs-stage-network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+networks:
+  ojs-stage-network:
+    driver: bridge
+  traefik:
+    external: true
+
+volumes:
+  ojs-db-data:
+  ojs-config:
+  ojs-files:
+  ojs-public:

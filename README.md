@@ -10,6 +10,8 @@ Lokale Docker-Umgebung für [Open Journal Systems](https://github.com/pkp/ojs) a
 
 Die Umgebung ist eigenständig: Sie hat ein eigenes Netzwerk und keinen Reverse-Proxy. Alle Ports sind nur an `127.0.0.1` gebunden.
 
+> **Stage:** Jeder Merge nach `main` wird automatisch nach **https://ojs.rz-vm182.gfz.de** (nur im VPN) deployt. Ablauf, Einrichtung und Betrieb stehen in [docs/stage-deployment.md](docs/stage-deployment.md).
+
 ## Erstes Setup
 
 Voraussetzung: Docker Desktop (WSL2) läuft.
@@ -115,7 +117,7 @@ Danach `docker compose -f docker-compose.dev.yml up -d ojs-app` ausführen.
 ## Wartung
 
 - **OJS-Update:**
-  1. `OJS_IMAGE_TAG` in `.env` anpassen (verfügbare Tags: https://hub.docker.com/r/pkpofficial/ojs/tags).
+  1. `OJS_IMAGE_TAG` in `.env` anpassen (verfügbare Tags: https://hub.docker.com/r/pkpofficial/ojs/tags). Für den PR auch den Standardwert in `docker/ojs/Dockerfile` und `.env.example` anheben. Stage baut mit dem Wert aus dem Dockerfile (siehe [docs/stage-deployment.md](docs/stage-deployment.md#ojs-version-aktualisieren)).
   2. Neu bauen und starten:
 
      ```powershell
@@ -175,10 +177,15 @@ Das Startskript des offiziellen Images (`pkp-pre-start`) versucht, Konfiguration
 
 | Datei | Zweck |
 |---|---|
-| `docker-compose.dev.yml` | Stack-Definition |
+| `docker-compose.dev.yml` | lokaler Stack |
+| `docker-compose.stage.yml` | Stage-Stack (Vorlage, der Digest wird von CI in `deploy/stage` gepinnt) |
 | `.env.example` / `.env` | Konfiguration (`.env` ist gitignored) |
-| `docker/ojs/Dockerfile` | offizielles Image + Xdebug + `ServerName` |
+| `docker/ojs/Dockerfile` | offizielles Image + Debian-Updates, Targets `dev` (Xdebug) und `stage` |
+| `docker/ojs/php.ini` | PHP-Limits für dev und stage (Uploads bis 64 MB) |
 | `docker/ojs/xdebug.ini` | Xdebug-Einstellungen (Modus über `XDEBUG_MODE`) |
+| `docker/ojs/stage/` | Stage-Entrypoints, Config-Generator, Healthcheck, Proxy-Konfiguration |
+| `.github/workflows/` | `stage-checks.yml` (Gate) und `publish-stage-images.yml` (Deployment) |
+| `.trivyignore` | bewusst akzeptierte Sicherheitsbefunde mit Ablaufdatum |
 | `docker/ojs/config.inc.php` | OJS-Konfiguration (generiert, gitignored, enthält Secrets) |
 | `scripts/setup-dev.ps1` | Setup, Code-Sync |
 | `.vscode/launch.json` | Xdebug-Konfiguration für VS Code |

@@ -1,2 +1,10 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Dateien, die in Linux-Container kopiert oder dort ausgefuehrt werden, immer mit LF
+# auschecken (core.autocrlf=true auf Windows wuerde sonst "#!/bin/sh\r" erzeugen).
+docker/** text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+.trivyignore text eol=lf

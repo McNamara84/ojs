@@ -1,0 +1,29 @@
+#!/usr/bin/env php
+<?php
+
+// Healthcheck fuer ojs-app (Stage). Sendet den oeffentlichen Host-Header, weil OJS
+// nach der Installation Anfragen mit fremdem Host ablehnt (allowed_hosts).
+// Erfolg: jede Antwort < 500 (vor der Installation z. B. 302 auf den Installer).
+
+$host = parse_url((string) getenv('OJS_BASE_URL'), PHP_URL_HOST) ?: 'localhost';
+$context = stream_context_create([
+    'http' => [
+        'header' => "Host: {$host}\r\nX-Forwarded-Proto: https\r\n",
+        'follow_location' => 0,
+        'ignore_errors' => true,
+        'timeout' => 5,
+    ],
+]);
+
+if (@file_get_contents('http://127.0.0.1/', false, $context) === false) {
+    exit(1);
+}
+
+$status = 0;
+foreach ($http_response_header ?? [] as $header) {
+    if (preg_match('#^HTTP/\S+\s+(\d{3})#', $header, $matches)) {
+        $status = (int) $matches[1];
+    }
+}
+
+exit($status > 0 && $status < 500 ? 0 : 1);
