@@ -8,6 +8,7 @@
 #
 # Stack-Variablen (Portainer): OJS_DB_PASSWORD, OJS_DB_ROOT_PASSWORD,
 #   MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_ENCRYPTION, MAIL_FROM_ADDRESS
+#   optional: OJS_RUN_UPGRADE, OJS_WORKER_WAIT_SECONDS, OJS_DB_NAME, OJS_DB_USER
 # Rollback: OJS_STAGE_APP_IMAGE=ghcr.io/mcnamara84/ojs-app@sha256:<digest>
 # Details: docs/stage-deployment.md
 # =============================================================================
@@ -67,6 +68,7 @@ services:
     command: ["ojs-worker", "jobs"]
     environment:
       TZ: Europe/Berlin
+      OJS_WORKER_WAIT_SECONDS: ${OJS_WORKER_WAIT_SECONDS:-30}
     volumes:
       - ojs-config:/var/www/config:ro
       - ojs-files:/var/www/files
@@ -85,6 +87,7 @@ services:
     command: ["ojs-worker", "scheduler"]
     environment:
       TZ: Europe/Berlin
+      OJS_WORKER_WAIT_SECONDS: ${OJS_WORKER_WAIT_SECONDS:-30}
     volumes:
       - ojs-config:/var/www/config:ro
       - ojs-files:/var/www/files

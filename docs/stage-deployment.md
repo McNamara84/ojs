@@ -94,6 +94,7 @@ Lege in Portainer einen neuen Stack an: **Stacks → Add stack → Repository**.
 | `MAIL_ENCRYPTION` | nein | `tls` (Standard), `ssl` oder `none` |
 | `MAIL_FROM_ADDRESS` | nein | Absender, Standard `noreply@gfz-potsdam.de` |
 | `OJS_RUN_UPGRADE` | nein | `1` (Standard) = DB-Upgrade automatisch beim Start |
+| `OJS_WORKER_WAIT_SECONDS` | nein | Wartetakt von Queue und Scheduler, Standard `30` Sekunden |
 | `OJS_STAGE_APP_IMAGE` | nein | nur für einen Rollback (siehe unten) |
 
 Die DB-Passwörter dürfen nach dem ersten Start **nicht mehr geändert** werden, ohne sie auch in MariaDB zu ändern. MariaDB übernimmt sie nur bei der Initialisierung.
