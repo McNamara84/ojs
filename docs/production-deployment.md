@@ -47,7 +47,8 @@ Die Prüfung ist bewusst misstrauisch. Als leer gilt die Datenbank nur, wenn die
 
 | Zustand der Datenbank | Verhalten |
 |---|---|
-| Tabelle `versions` fehlt | leer, der Installer ist zuständig |
+| Gar keine Tabellen | leer, der Installer ist zuständig |
+| Tabelle `versions` fehlt, andere Tabellen vorhanden | Abbruch. Vermutlich falscher Datenbankname oder unvollständig eingespielter Dump. Mit `OJS_ALLOW_INSTALLER=1` freigebbar |
 | Aktuelle OJS-Version vorhanden | `installed = On` wird gesetzt, bei Bedarf ein `app_key` erzeugt |
 | Tabelle `versions` da, aber ohne aktuelle OJS-Version | Abbruch. Halb initialisiert oder Datenbank einer anderen PKP-Anwendung. Mit `OJS_ALLOW_INSTALLER=1` bewusst freigebbar |
 | Nicht erreichbar, fehlende Rechte, sonstiger Fehler | Abbruch | Der Container startet dann in einer Neustartschleife und liefert nichts aus. Das ist gewollt: Eine vorübergehende Störung würde sonst wie eine leere Datenbank aussehen, und der Installer wäre erreichbar.
@@ -169,7 +170,7 @@ Zusätzlich sichern: `ojs_ojs_private` (Einreichungsdateien) und `ojs-prod-confi
 | `ojs-prod-db` startet nicht, Log nennt Zugriffsfehler | Die Stack-Variablen weichen von den alten Zugangsdaten ab. MariaDB übernimmt sie bei bestehenden Daten nicht |
 | `ojs-prod-app` startet nicht, Log: „Tabelle `versions` existiert, enthält aber keine aktuelle OJS-Version“ | Die Datenbank ist halb initialisiert oder gehört einer anderen Anwendung. Prüfen, ob das richtige Volume eingebunden ist. Ist der Installer hier wirklich gewollt: Stack-Variable `OJS_ALLOW_INSTALLER=1` |
 | `ojs-prod-app` startet nicht, Log: „Datenbank … nicht erreichbar … Start abgebrochen“ | Absicht. Solange die Konfiguration `installed = Off` meldet und die Datenbank nicht sicher als leer erkannt wird, startet der Container nicht, damit kein Installer vor einer gefüllten Datenbank erscheint. Zugangsdaten und Zustand von `ojs-prod-db` prüfen |
-| Es erscheint der Installer statt der Seite | Die Datenbank ist nachweislich leer (Tabelle `versions` fehlt). **Nicht** abschicken, sondern prüfen, ob das richtige Volume eingebunden ist |
+| Es erscheint der Installer statt der Seite | Die Datenbank ist nachweislich leer (keine einzige Tabelle). **Nicht** abschicken, sondern prüfen, ob das richtige Volume eingebunden ist |
 | `ojs-prod-app` bleibt *unhealthy* | Datenbank-Upgrade fehlgeschlagen. Log prüfen, notfalls Backup einspielen |
 | Traefik antwortet mit 404 | Container hängt nicht im Netzwerk `traefik` oder das Label `traefik.enable=true` fehlt |
 | `deploy/prod` bewegt sich nicht | Läufe von „Promote Production Release“ prüfen. Blockiert wird unter anderem, wenn es für den Release-Commit keinen `deploy/stage`-Commit gibt |

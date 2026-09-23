@@ -71,13 +71,59 @@ function quoted(string $value): string
  * ueberschreibt den Bestand. Ein abgebrochener Start ist die harmlosere Variante:
  * Der Container wird neu gestartet und meldet den Fehler im Log.
  *
- * Als leer gilt nur die fehlende Tabelle "versions" (MySQL-Fehler 1146) - der normale
- * Zustand einer frischen Datenbank. Existiert die Tabelle, enthaelt aber keine
- * aktuelle OJS-Version, ist die Datenbank halb initialisiert oder gehoert einer
- * anderen PKP-Anwendung; auch dann bricht der Start ab. Mit OJS_ALLOW_INSTALLER=1
- * laesst sich dieser Fall bewusst freigeben.
+ * Als leer gilt die Datenbank nur, wenn die Tabelle "versions" fehlt (MySQL-Fehler
+ * 1146) UND ueberhaupt keine Tabellen vorhanden sind. Fehlt "versions", gibt es aber
+ * andere Tabellen, steht dort fremder oder unvollstaendiger Bestand (falscher
+ * Datenbankname, halb eingespielter Dump). Existiert "versions" ohne aktuelle
+ * OJS-Version, ist die Datenbank halb initialisiert oder gehoert einer anderen
+ * PKP-Anwendung. Beides bricht den Start ab; mit OJS_ALLOW_INSTALLER=1 laesst sich
+ * der Installer bewusst freigeben.
  */
 const ER_NO_SUCH_TABLE = 1146;
+
+/**
+ * Prueft, ob die Datenbank wirklich leer ist, also gar keine Tabellen enthaelt.
+ * Nur dann ist der Web-Installer der richtige Weg. Gibt es Tabellen, aber keine
+ * "versions", steht dort fremder oder unvollstaendiger Bestand - dann Abbruch.
+ */
+function databaseIsEmpty(array $db): bool
+{
+    $connection = @new mysqli($db['host'], $db['user'], $db['password'], $db['name']);
+
+    if ($connection->connect_errno) {
+        fail("Datenbank {$db['name']} nicht erreichbar: {$connection->connect_error}. Start abgebrochen.");
+    }
+
+    $result = @$connection->query(
+        'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()'
+    );
+
+    if ($result === false) {
+        $error = $connection->error;
+        $connection->close();
+        fail("Tabellen der Datenbank nicht ermittelbar: {$error}. Start abgebrochen.");
+    }
+
+    $tables = (int) $result->fetch_row()[0];
+    $connection->close();
+
+    if ($tables === 0) {
+        info('Datenbank ist leer - der Web-Installer ist zustaendig.');
+        return true;
+    }
+
+    if (env('OJS_ALLOW_INSTALLER', '0') === '1') {
+        info("Datenbank enthaelt {$tables} Tabellen ohne OJS-Installation - per OJS_ALLOW_INSTALLER=1 freigegeben.");
+        return true;
+    }
+
+    fail(
+        "Die Datenbank {$db['name']} enthaelt {$tables} Tabellen, aber keine OJS-Installation. "
+        . 'Moeglicherweise ist der Datenbankname falsch oder ein Dump nur teilweise eingespielt. '
+        . 'Start abgebrochen, damit der Installer den Bestand nicht ueberschreibt. '
+        . 'Ist der Installer hier wirklich gewollt: OJS_ALLOW_INSTALLER=1 setzen.'
+    );
+}
 
 function databaseHasInstallation(array $db): bool
 {
@@ -99,8 +145,11 @@ function databaseHasInstallation(array $db): bool
         $connection->close();
 
         if ($errno === ER_NO_SUCH_TABLE) {
-            info('Tabelle "versions" fehlt - Datenbank ist leer, der Web-Installer ist zustaendig.');
-            return false;
+            // Fehler 1146 heisst nur "keine Tabelle versions". Als leer gilt die
+            // Datenbank erst, wenn sie ueberhaupt keine Tabellen enthaelt. Sonst
+            // koennte hinter einem falschen Datenbanknamen oder einem halb
+            // eingespielten Dump fremder Bestand stehen.
+            return !databaseIsEmpty($db);
         }
 
         fail("Abfrage der Tabelle \"versions\" fehlgeschlagen (Fehler {$errno}): {$error}. Start abgebrochen.");
