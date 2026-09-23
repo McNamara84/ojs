@@ -59,7 +59,8 @@ Ein neu erzeugter `app_key` bedeutet lediglich, dass sich alle Nutzer einmal neu
 
 Der Container `ojs-prod-emtf` liefert die alte EMTF-Sammlung (Elektromagnetische Tiefenforschung) unter **https://dataservices.gfz.de/emtf/** aus, damit die Adressen erreichbar bleiben, bis die Inhalte in OJS eingepflegt sind.
 
-- **Inhalt:** 259 Dateien, rund 360 MB, überwiegend PDFs und statische HTML-Seiten aus den Jahrgängen 2001 bis 2009. Sie liegen im Repository unter `emtf/` und werden beim Image-Bau nach `/usr/share/nginx/html/emtf` kopiert.
+- **Inhalt:** rund 360 MB, überwiegend PDFs und statische HTML-Seiten. Die Sammlung umfasst Übersichten der Kolloquien von **1962 bis 2025** sowie die Tagungsbände und Einzelbeiträge der Jahre 2001, 2003, 2005, 2007 und 2009. Sie liegt im Repository unter `emtf/` und wird beim Image-Bau nach `/usr/share/nginx/html/emtf` kopiert.
+- **Verweise:** `scripts/check-emtf-links.py` prüft in „Stage Checks“, ob alle lokal verlinkten Dateien vorhanden sind. Bewusst geduldete Lücken stehen mit Begründung in `ALLOWED_MISSING` im Skript, derzeit die nicht überlieferten Sammelbände 2001 und 2003 sowie Reste eines Word-Exports.
 - **Pfad:** Traefik entfernt das Präfix `/emtf` **nicht**. Die Dateien liegen deshalb auch im Container unter `emtf/`. Der Grund: nginx erzeugt für Verzeichnisse ohne Schrägstrich eine Weiterleitung aus dem angefragten Pfad. Ohne Präfix zeigte sie auf `/2007/` statt auf `/emtf/2007/`.
 - **Weiterleitungen:** nginx liefert sie relativ aus (`absolute_redirect off`), weil es nichts von der TLS-Terminierung durch Traefik weiß und sonst `http://`-Adressen erzeugen würde.
 - **Priorität:** Auf `dataservices.gfz.de` existiert bereits ein Router, der auf `dataservices.gfz-potsdam.de` weiterleitet. Der EMTF-Router trägt deshalb `priority=1000` und greift für `/emtf` zuverlässig zuerst. Alle anderen Pfade bleiben unverändert beim bestehenden Router.
