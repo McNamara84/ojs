@@ -35,6 +35,7 @@ jobs:
     outputs:
       app_image: ${{ steps.source.outputs.app_image }}
       current: ${{ steps.source.outputs.current }}
+      emtf_image: ${{ steps.source.outputs.emtf_image }}
       sha: ${{ steps.source.outputs.sha }}
 
     steps:
@@ -67,6 +68,7 @@ jobs:
             echo "current=$CURRENT"
             echo "sha=$SOURCE_SHA"
             echo "app_image=ghcr.io/${OWNER}/ojs-app"
+            echo "emtf_image=ghcr.io/${OWNER}/ojs-emtf"
           } >> "$GITHUB_OUTPUT"
 
   publish:
@@ -117,40 +119,62 @@ jobs:
             type=gha,scope=stage-checks
           cache-to: type=gha,mode=max,scope=stage-app
 
+      - name: Build and push the static EMTF image
+        id: emtf-build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/emtf/Dockerfile
+          push: true
+          tags: ${{ needs.validate.outputs.emtf_image }}:sha-${{ needs.validate.outputs.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.validate.outputs.sha }}
+            org.opencontainers.image.version=sha-${{ needs.validate.outputs.sha }}
+          cache-from: |
+            type=gha,scope=emtf
+            type=gha,scope=emtf-checks
+          cache-to: type=gha,mode=max,scope=emtf
+
       - name: Prepare Trivy cache
         run: mkdir -p "${{ runner.temp }}/trivy-cache"
 
-      - name: Scan the exact published image digest
+      - name: Scan the exact published image digests
         env:
           APP_IMAGE_REF: ${{ needs.validate.outputs.app_image }}@${{ steps.app-build.outputs.digest }}
+          EMTF_IMAGE_REF: ${{ needs.validate.outputs.emtf_image }}@${{ steps.emtf-build.outputs.digest }}
           TRIVY_DISABLE_VEX_NOTICE: 'true'
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
           TRIVY_USERNAME: ${{ github.actor }}
         run: |
           set -euo pipefail
 
-          if [[ ! "$APP_IMAGE_REF" =~ @sha256:[0-9a-f]{64}$ ]]; then
-            echo "Invalid published image reference: $APP_IMAGE_REF" >&2
-            exit 1
-          fi
+          for image_ref in "$APP_IMAGE_REF" "$EMTF_IMAGE_REF"; do
+            if [[ ! "$image_ref" =~ @sha256:[0-9a-f]{64}$ ]]; then
+              echo "Invalid published image reference: $image_ref" >&2
+              exit 1
+            fi
 
-          docker run --rm \
-            -e TRIVY_DISABLE_VEX_NOTICE \
-            -e TRIVY_PASSWORD \
-            -e TRIVY_USERNAME \
-            -v "${{ runner.temp }}/trivy-cache:/root/.cache/trivy" \
-            -v "$PWD/.trivyignore:/work/.trivyignore:ro" \
-            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image \
-            --cache-dir /root/.cache/trivy \
-            --ignorefile /work/.trivyignore \
-            --scanners vuln \
-            --format table \
-            --exit-code 1 \
-            --ignore-unfixed \
-            --pkg-types os,library \
-            --severity CRITICAL,HIGH \
-            --skip-version-check \
-            "$APP_IMAGE_REF"
+            echo "::group::Trivy $image_ref"
+            docker run --rm \
+              -e TRIVY_DISABLE_VEX_NOTICE \
+              -e TRIVY_PASSWORD \
+              -e TRIVY_USERNAME \
+              -v "${{ runner.temp }}/trivy-cache:/root/.cache/trivy" \
+              -v "$PWD/.trivyignore:/work/.trivyignore:ro" \
+              aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image \
+              --cache-dir /root/.cache/trivy \
+              --ignorefile /work/.trivyignore \
+              --scanners vuln \
+              --format table \
+              --exit-code 1 \
+              --ignore-unfixed \
+              --pkg-types os,library \
+              --severity CRITICAL,HIGH \
+              --skip-version-check \
+              "$image_ref"
+            echo "::endgroup::"
+          done
 
       - name: Confirm that the candidate is still current
         id: latest
@@ -174,6 +198,8 @@ jobs:
         env:
           APP_DIGEST: ${{ steps.app-build.outputs.digest }}
           APP_IMAGE: ${{ needs.validate.outputs.app_image }}
+          EMTF_DIGEST: ${{ steps.emtf-build.outputs.digest }}
+          EMTF_IMAGE: ${{ needs.validate.outputs.emtf_image }}
           SOURCE_SHA: ${{ needs.validate.outputs.sha }}
           # Nur fuer "compose config" (Pflichtvariablen); Portainer liefert die echten Werte.
           OJS_DB_PASSWORD: ci-dummy
@@ -182,22 +208,27 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ ! "$APP_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "Invalid application image digest: $APP_DIGEST" >&2
-            exit 1
-          fi
+          for digest in "$APP_DIGEST" "$EMTF_DIGEST"; do
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Invalid image digest: $digest" >&2
+              exit 1
+            fi
+          done
 
           APP_TEMPLATE="${APP_IMAGE}:deployment-template"
+          EMTF_TEMPLATE="${EMTF_IMAGE}:deployment-template"
           APP_TEMPLATE_COUNT="$(grep -Fc "$APP_TEMPLATE" docker-compose.stage.yml)"
+          EMTF_TEMPLATE_COUNT="$(grep -Fc "$EMTF_TEMPLATE" docker-compose.stage.yml)"
 
-          if [[ "$APP_TEMPLATE_COUNT" -ne 3 ]]; then
-            echo "Unexpected Stage image template count: app=$APP_TEMPLATE_COUNT" >&2
+          if [[ "$APP_TEMPLATE_COUNT" -ne 3 || "$EMTF_TEMPLATE_COUNT" -ne 1 ]]; then
+            echo "Unexpected Stage image template count: app=$APP_TEMPLATE_COUNT emtf=$EMTF_TEMPLATE_COUNT" >&2
             exit 1
           fi
 
           sed -i "s|${APP_TEMPLATE}|${APP_IMAGE}@${APP_DIGEST}|g" docker-compose.stage.yml
+          sed -i "s|${EMTF_TEMPLATE}|${EMTF_IMAGE}@${EMTF_DIGEST}|g" docker-compose.stage.yml
 
-          if grep -Fq "$APP_TEMPLATE" docker-compose.stage.yml; then
+          if grep -Fq "$APP_TEMPLATE" docker-compose.stage.yml || grep -Fq "$EMTF_TEMPLATE" docker-compose.stage.yml; then
             echo "Stage image templates remain after digest pinning." >&2
             exit 1
           fi

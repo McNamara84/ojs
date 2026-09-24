@@ -1,0 +1,14 @@
+# Build-Kontext fuer docker/emtf/Dockerfile (Kontext ist das Repo-Wurzelverzeichnis).
+# Gebraucht werden nur emtf/ und docker/emtf/.
+.git
+.github
+.vscode
+docs
+scripts
+docker/ojs
+ojs-src
+.env
+.env.example
+.trivyignore
+*.md
+docker-compose*.yml

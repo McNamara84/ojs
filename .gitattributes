@@ -8,3 +8,6 @@ docker/** text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
 .trivyignore text eol=lf
+
+# Historisches Archiv: Dateien unveraendert lassen, keine Zeilenenden-Normalisierung
+emtf/** -text
