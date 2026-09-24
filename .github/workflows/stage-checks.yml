@@ -19,7 +19,10 @@ concurrency:
 env:
   STAGE_TEMPLATE: ghcr.io/mcnamara84/ojs-app:deployment-template
   STAGE_TEMPLATE_COUNT: '3'
+  EMTF_TEMPLATE: ghcr.io/mcnamara84/ojs-emtf:deployment-template
+  EMTF_TEMPLATE_COUNT: '1'
   CI_IMAGE: ojs-app:ci
+  CI_EMTF_IMAGE: ojs-emtf:ci
 
 jobs:
   lint:
@@ -46,6 +49,9 @@ jobs:
             rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
             -color
 
+      - name: Check the static EMTF collection for dead local links
+        run: python3 scripts/check-emtf-links.py emtf
+
       - name: Validate Compose files
         env:
           # Dummy-Werte nur fuer die Syntaxpruefung der Pflichtvariablen
@@ -62,9 +68,10 @@ jobs:
         run: |
           set -euo pipefail
           for compose in docker-compose.stage.yml docker-compose.prod.yml; do
-            count="$(grep -Fc "$STAGE_TEMPLATE" "$compose")"
-            if [[ "$count" -ne "$STAGE_TEMPLATE_COUNT" ]]; then
-              echo "Expected $STAGE_TEMPLATE_COUNT image template markers in $compose, found $count." >&2
+            app_count="$(grep -Fc "$STAGE_TEMPLATE" "$compose")"
+            emtf_count="$(grep -Fc "$EMTF_TEMPLATE" "$compose")"
+            if [[ "$app_count" -ne "$STAGE_TEMPLATE_COUNT" || "$emtf_count" -ne "$EMTF_TEMPLATE_COUNT" ]]; then
+              echo "Unexpected image template count in $compose: app=$app_count emtf=$emtf_count." >&2
               exit 1
             fi
           done
@@ -97,6 +104,19 @@ jobs:
             type=gha,scope=stage-app
           cache-to: type=gha,mode=max,scope=stage-checks
 
+      - name: Build the static EMTF image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/emtf/Dockerfile
+          load: true
+          push: false
+          tags: ${{ env.CI_EMTF_IMAGE }}
+          cache-from: |
+            type=gha,scope=emtf-checks
+            type=gha,scope=emtf
+          cache-to: type=gha,mode=max,scope=emtf-checks
+
       - name: Syntax-check PHP helpers inside the image
         run: |
           set -euo pipefail
@@ -117,6 +137,7 @@ jobs:
             ojs-app: { image: $CI_IMAGE, pull_policy: never }
             ojs-queue: { image: $CI_IMAGE, pull_policy: never }
             ojs-scheduler: { image: $CI_IMAGE, pull_policy: never }
+            ojs-emtf: { image: $CI_EMTF_IMAGE, pull_policy: never }
           EOF
 
           compose() {
@@ -153,28 +174,45 @@ jobs:
           grep -q 'ojs-worker:scheduler\] OJS ist noch nicht installiert' <<< "$worker_logs"
           compose exec -T ojs-app grep -q '^job_runner = Off' /var/www/config/config.inc.php
 
+          # Statische EMTF-Sammlung: Einstieg, Weiterleitung ohne Schraegstrich,
+          # eine Unterseite und die Abgrenzung nach aussen.
+          emtf_request() {
+            docker run --rm --network traefik               curlimages/curl:8.16.0@sha256:463eaf6072688fe96ac64fa623fe73e1dbe25d8ad6c34404a669ad3ce1f104b6               -s -o /dev/null -w '%{http_code}' "http://ojs-stage-emtf$1"
+          }
+
+          [[ "$(emtf_request /emtf/)" == "200" ]]
+          [[ "$(emtf_request /emtf)" == "301" ]]
+          [[ "$(emtf_request /emtf/index.html)" == "200" ]]
+          [[ "$(emtf_request /)" == "404" ]]
+
           compose down -v
 
       - name: Prepare Trivy cache
         run: mkdir -p "${{ runner.temp }}/trivy-cache"
 
-      - name: Scan the Stage image (Trivy)
+      - name: Scan the images (Trivy)
         env:
           TRIVY_DISABLE_VEX_NOTICE: 'true'
         run: |
-          docker run --rm \
-            -e TRIVY_DISABLE_VEX_NOTICE \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "${{ runner.temp }}/trivy-cache:/root/.cache/trivy" \
-            -v "$PWD/.trivyignore:/work/.trivyignore:ro" \
-            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image \
-            --cache-dir /root/.cache/trivy \
-            --ignorefile /work/.trivyignore \
-            --scanners vuln \
-            --format table \
-            --exit-code 1 \
-            --ignore-unfixed \
-            --pkg-types os,library \
-            --severity CRITICAL,HIGH \
-            --skip-version-check \
-            "$CI_IMAGE"
+          set -euo pipefail
+
+          for image in "$CI_IMAGE" "$CI_EMTF_IMAGE"; do
+            echo "::group::Trivy $image"
+            docker run --rm \
+              -e TRIVY_DISABLE_VEX_NOTICE \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "${{ runner.temp }}/trivy-cache:/root/.cache/trivy" \
+              -v "$PWD/.trivyignore:/work/.trivyignore:ro" \
+              aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image \
+              --cache-dir /root/.cache/trivy \
+              --ignorefile /work/.trivyignore \
+              --scanners vuln \
+              --format table \
+              --exit-code 1 \
+              --ignore-unfixed \
+              --pkg-types os,library \
+              --severity CRITICAL,HIGH \
+              --skip-version-check \
+              "$image"
+            echo "::endgroup::"
+          done

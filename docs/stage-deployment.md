@@ -30,6 +30,7 @@ Niemand arbeitet auf `deploy/stage` oder mergt dorthin. Jeder Deployment-Commit 
 | `ojs-stage-queue` | Hintergrund-Jobs (`jobs.php work`, Neustart stündlich) |
 | `ojs-stage-scheduler` | geplante Aufgaben (`scheduler.php work`) |
 | `ojs-stage-db` | MariaDB 11.8, per Digest gepinnt |
+| `ojs-stage-emtf` | statische EMTF-Sammlung unter `/emtf/` zur Vorabprüfung, siehe [production-deployment.md](production-deployment.md#statische-emtf-sammlung-übergangslösung) |
 
 | Volume | Inhalt |
 |---|---|
