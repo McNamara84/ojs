@@ -187,6 +187,7 @@ Das Startskript des offiziellen Images (`pkp-pre-start`) versucht, Konfiguration
 | `docker/ojs/php.ini` | PHP-Limits für dev und stage (Uploads bis 64 MB) |
 | `docker/ojs/xdebug.ini` | Xdebug-Einstellungen (Modus über `XDEBUG_MODE`) |
 | `docker/ojs/stage/` | Stage-Entrypoints, Config-Generator, Healthcheck, Proxy-Konfiguration |
+| `docker/emtf/` + `emtf/` | statische EMTF-Sammlung, ausgeliefert unter `/emtf/` (Übergangslösung bis zur Übernahme in OJS) |
 | `.github/workflows/` | `stage-checks.yml` (Gate), `publish-stage-images.yml` (Stage), `production-release-signal.yml` und `promote-production-release.yml` (Produktion) |
 | `.trivyignore` | bewusst akzeptierte Sicherheitsbefunde mit Ablaufdatum |
 | `docker/ojs/config.inc.php` | OJS-Konfiguration (generiert, gitignored, enthält Secrets) |

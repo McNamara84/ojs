@@ -1,3 +1,6 @@
 .env
 docker/ojs/config.inc.php
 ojs-src/
+
+# Python-Zwischenstand
+__pycache__/
