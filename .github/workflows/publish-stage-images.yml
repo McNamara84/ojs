@@ -106,6 +106,7 @@ jobs:
         with:
           context: docker/ojs
           target: stage
+          pull: true
           push: true
           tags: ${{ needs.validate.outputs.app_image }}:sha-${{ needs.validate.outputs.sha }}
           labels: |
@@ -125,6 +126,7 @@ jobs:
         with:
           context: .
           file: docker/emtf/Dockerfile
+          pull: true
           push: true
           tags: ${{ needs.validate.outputs.emtf_image }}:sha-${{ needs.validate.outputs.sha }}
           labels: |

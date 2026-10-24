@@ -5,11 +5,22 @@
 #   target stage – Stage-Deployment (GHCR), siehe docker-compose.stage.yml
 # =============================================================================
 ARG OJS_IMAGE_TAG=3_5_0-5
+# Zusaetzlich per Digest gepinnt (wie MariaDB und nginx): PKP baut denselben Tag
+# bei Sicherheitsupdates neu, zuletzt am 22.10.2026 mit PHP 8.3.36 (php2shell,
+# CVE-2026-109618/109619). Ohne Pinning haengt es vom Build-Cache ab, welcher
+# Stand tatsaechlich ausgeliefert wird; so ist jedes Update eine sichtbare
+# Aenderung im Pull Request. Beim Anheben beide Werte gemeinsam setzen - bei
+# abweichenden Angaben entscheidet der Digest.
+ARG OJS_IMAGE_DIGEST=sha256:202b82352f16485de0d33860ab392ee32835aab6bef5e9e18f41e6ed3f2d66ea
 
-FROM pkpofficial/ojs:${OJS_IMAGE_TAG} AS base
+FROM pkpofficial/ojs:${OJS_IMAGE_TAG}@${OJS_IMAGE_DIGEST} AS base
 
 USER root
 
+# Der PHP-Interpreter steckt im Basis-Image unter /usr/local und ist KEIN
+# Debian-Paket - apt aktualisiert ihn also nicht. PHP-Updates kommen nur ueber
+# ein neues Basis-Image (siehe OJS_IMAGE_DIGEST oben).
+#
 # Das offizielle Image wird nur bei OJS-Releases neu gebaut. Ein in CI taeglich
 # wechselnder Wert invalidiert den Cache und holt aktuelle Debian-Sicherheitsupdates.
 ARG SYSTEM_PACKAGES_REFRESH=unset
