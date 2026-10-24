@@ -95,6 +95,7 @@ jobs:
           context: docker/ojs
           target: stage
           load: true
+          pull: true
           push: false
           tags: ${{ env.CI_IMAGE }}
           build-args: |
@@ -110,6 +111,7 @@ jobs:
           context: .
           file: docker/emtf/Dockerfile
           load: true
+          pull: true
           push: false
           tags: ${{ env.CI_EMTF_IMAGE }}
           cache-from: |

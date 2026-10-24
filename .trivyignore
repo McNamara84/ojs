@@ -21,8 +21,9 @@
 # guzzlehttp/guzzle 7.10.6 (Kern) und 7.9.3 (PayPal-Plugin), behoben in 7.15.2
 CVE-2026-69246 exp:2026-11-21
 
-# league/commonmark 2.8.2 (Kern), behoben in 2.9.0 bis 2.10.0
+# league/commonmark 2.8.2 (Kern), behoben in 2.9.0 bis 2.10.2
 CVE-2026-71488 exp:2026-11-21
+GHSA-3q6v-r5mr-hxv8 exp:2026-11-21
 GHSA-8rr7-cvq3-gmfh exp:2026-11-21
 GHSA-f8fg-pg57-v4j8 exp:2026-11-21
 GHSA-g2gp-3wwq-f4ph exp:2026-11-21

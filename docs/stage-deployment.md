@@ -153,7 +153,15 @@ Geht der Rollback über einen Versionssprung zurück, ist die Datenbank anschlie
 
 ## OJS-Version aktualisieren
 
-1. `OJS_IMAGE_TAG` in `docker/ojs/Dockerfile` (und in `.env.example`) auf das neue PKP-Release setzen. Verfügbare Tags: https://hub.docker.com/r/pkpofficial/ojs/tags
+1. `OJS_IMAGE_TAG` **und** `OJS_IMAGE_DIGEST` in `docker/ojs/Dockerfile` setzen (den Tag auch in `.env.example`). Verfügbare Tags: https://hub.docker.com/r/pkpofficial/ojs/tags
+
+   ```bash
+   docker buildx imagetools inspect pkpofficial/ojs:3_5_0-5
+   ```
+
+   Das gilt auch **ohne** neues OJS-Release: PKP baut denselben Tag bei Sicherheitsupdates neu. So kam am 22.10.2026 PHP 8.3.36 gegen php2shell (CVE-2026-109618/109619) ins Image. Ein Blick auf das Änderungsdatum des Tags lohnt sich deshalb regelmäßig.
+
+   **Wichtig:** Der PHP-Interpreter liegt im Basis-Image unter `/usr/local` und ist kein Debian-Paket. Unser `apt-get upgrade` erreicht ihn nicht, und Trivy erkennt ihn ebenfalls nicht. PHP-Updates kommen ausschließlich über ein neues Basis-Image.
 2. Die Befunde in `.trivyignore` neu bewerten. Einträge, die das neue Release behebt, entfernen.
 3. Ein DB-Backup auf Stage anlegen.
 4. Einen PR öffnen und mergen. Beim ersten Start führt `ojs-app` das Datenbank-Upgrade aus (siehe Log von `ojs-stage-app`).

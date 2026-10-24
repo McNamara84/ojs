@@ -119,7 +119,7 @@ Danach `docker compose -f docker-compose.dev.yml up -d ojs-app` ausführen.
 ## Wartung
 
 - **OJS-Update:**
-  1. `OJS_IMAGE_TAG` in `.env` anpassen (verfügbare Tags: https://hub.docker.com/r/pkpofficial/ojs/tags). Für den PR auch den Standardwert in `docker/ojs/Dockerfile` und `.env.example` anheben. Stage baut mit dem Wert aus dem Dockerfile (siehe [docs/stage-deployment.md](docs/stage-deployment.md#ojs-version-aktualisieren)).
+  1. `OJS_IMAGE_TAG` in `.env` anpassen (verfügbare Tags: https://hub.docker.com/r/pkpofficial/ojs/tags). Für den PR auch `OJS_IMAGE_TAG` **und** `OJS_IMAGE_DIGEST` in `docker/ojs/Dockerfile` sowie den Tag in `.env.example` anheben. Stage baut mit dem Wert aus dem Dockerfile (siehe [docs/stage-deployment.md](docs/stage-deployment.md#ojs-version-aktualisieren)).
   2. Neu bauen und starten:
 
      ```powershell
