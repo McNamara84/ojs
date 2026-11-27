@@ -1,6 +1,16 @@
 # Production-Deployment (RZ-VM499)
 
-OJS läuft in Produktion unter **https://ojs.rz-vm499.gfz.de**. RZ-VM499 baut keine Images. Ein veröffentlichter GitHub-Release befördert genau den Image-Digest nach `deploy/prod`, der zuvor auf Stage lief. Portainer folgt diesem Branch. Das Verfahren entspricht dem von ERNIE.
+Auf RZ-VM499 liefert der Stack standardmäßig nur die [Blauen Bände](https://dataservices.gfz.de/emtf/) aus. OJS, Queue, Scheduler und Datenbank sind pausiert. Für `ojs.rz-vm499.gfz.de` stellt der Stack damit keine Route bereit.
+
+Ein veröffentlichter GitHub-Release befördert die auf Stage erprobten Image-Digests nach `deploy/prod`. Portainer folgt diesem Branch.
+
+## Wiederanlauf und Freigabe von OJS
+
+Für den Wiederanlauf muss `deploy/prod` den Release mit der Pause enthalten. In Portainer beim Stack `ojs-prod` **Pull and redeploy** wählen. Ein Neustart der alten Container verwendet noch deren bisherige Konfiguration. Falls der frühere Stack `ojs` noch existiert, diesen gestoppt lassen.
+
+Für die Pause `OJS_PROD_REPLICAS` ungesetzt lassen oder auf `0` setzen. Beim Redeploy entfernt Compose auch vorhandene OJS-Container und erhält die benannten Volumes. Compose benötigt weiterhin die Bestandsvolumes und die Stack-Variablen `OJS_DB_PASSWORD`, `OJS_DB_ROOT_PASSWORD` und `MAIL_HOST`.
+
+Zur Freigabe in Portainer `OJS_PROD_REPLICAS=1` setzen und den Stack neu deployen. Damit starten die vier OJS-Dienste mit den vorhandenen Volumes und Traefik veröffentlicht OJS wieder unter `https://ojs.rz-vm499.gfz.de`.
 
 ## Ablauf
 
@@ -23,6 +33,7 @@ Produktion bekommt damit nie ein frisch gebautes Image, sondern exakt das Manife
 
 | Container | Aufgabe |
 |---|---|
+| `ojs-prod-emtf` | nginx für die Blauen Bände, auch bei pausiertem OJS aktiv |
 | `ojs-prod-app` | Apache/PHP 8.3 (OJS), Traefik-Router `ojs-prod-router` |
 | `ojs-prod-queue` | Hintergrund-Jobs |
 | `ojs-prod-scheduler` | geplante Aufgaben |
@@ -71,7 +82,7 @@ Der Container `ojs-prod-emtf` liefert die alte EMTF-Sammlung (Elektromagnetische
 
 ## Einmalige Übernahme der Altinstanz
 
-> **Reihenfolge einhalten.** Der neue Stack verwendet dieselben Volumes wie der alte. Lösche den alten Stack deshalb erst, wenn der neue läuft. Dann sind die Volumes in Benutzung, und Docker verweigert ein versehentliches Löschen.
+> Die folgenden Schritte für die Übernahme setzen aktiviertes OJS (`OJS_PROD_REPLICAS=1`) voraus. Den alten Stack erst löschen, nachdem die übernommenen Daten in Schritt 5 geprüft wurden. Während der OJS-Pause die Bestandsvolumes aufbewahren.
 
 ### 1. Sicherung anlegen
 
@@ -165,7 +176,7 @@ Danach neu deployen. Zum Zurückkehren auf den automatischen Stand die Variable 
 
 ## Backup
 
-Empfohlen ist ein regelmäßiger Dump, zumindest vor jedem Release:
+Bei laufender Datenbank empfiehlt sich ein regelmäßiger Dump, zumindest vor jedem Release.
 
 ```bash
 docker exec ojs-prod-db sh -c 'mariadb-dump -u root -p"$MARIADB_ROOT_PASSWORD" --single-transaction --routines --events --result-file=/tmp/ojs.sql "$MARIADB_DATABASE"'
@@ -186,5 +197,5 @@ Zusätzlich sichern: `ojs_ojs_private` (Einreichungsdateien) und `ojs-prod-confi
 | `ojs-prod-app` startet nicht, Log: „Datenbank … nicht erreichbar … Start abgebrochen“ | Absicht. Solange die Konfiguration `installed = Off` meldet und die Datenbank nicht sicher als leer erkannt wird, startet der Container nicht, damit kein Installer vor einer gefüllten Datenbank erscheint. Zugangsdaten und Zustand von `ojs-prod-db` prüfen |
 | Es erscheint der Installer statt der Seite | Die Datenbank ist nachweislich leer (keine einzige Tabelle). **Nicht** abschicken, sondern prüfen, ob das richtige Volume eingebunden ist |
 | `ojs-prod-app` bleibt *unhealthy* | Datenbank-Upgrade fehlgeschlagen. Log prüfen, notfalls Backup einspielen |
-| Traefik antwortet mit 404 | Container hängt nicht im Netzwerk `traefik` oder das Label `traefik.enable=true` fehlt |
-| `deploy/prod` bewegt sich nicht | Läufe von „Promote Production Release“ prüfen. Blockiert wird unter anderem, wenn es für den Release-Commit keinen `deploy/stage`-Commit gibt |
+| Traefik antwortet unter `https://dataservices.gfz.de/emtf/` mit 404 | Bei `ojs-prod-emtf` das Netzwerk `traefik` und das Label `traefik.enable=true` prüfen |
+| `deploy/prod` bewegt sich nach einem Release nicht | Im Job `validate` von „Promote Production Release“ die Stage-Läufe für den getaggten Commit prüfen. Waren sie bei Veröffentlichung noch offen, `validate` nach ihrem Erfolg erneut starten. Erfordert die Reparatur einen neuen Commit, nach dessen erfolgreichem Stage-Deployment einen neuen Patch-Release veröffentlichen. |

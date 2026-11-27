@@ -220,12 +220,13 @@ jobs:
             core.setOutput('ready', ready ? 'true' : 'false');
 
             if (!ready) {
-              core.notice(
+              core.setFailed(
                 `Production promotion is blocked for ${sourceSha}: ` +
                 results
                   .filter((result) => result.status !== 'completed' || result.conclusion !== 'success')
                   .map((result) => `${result.name}: ${result.status}/${result.conclusion}`)
-                  .join(', ')
+                  .join(', ') +
+                '. Re-run this job after both Stage workflows succeed for this commit.'
               );
             }
 

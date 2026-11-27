@@ -6,7 +6,35 @@
 # =============================================================================
 ARG OJS_IMAGE_TAG=3_5_0-5
 
-FROM pkpofficial/ojs:${OJS_IMAGE_TAG} AS base
+FROM composer:2.11.3@sha256:5b2137f112f939a92788ceb5e55f54859d9dbf467a44037cf7760bdda949f365 AS composer-cli
+
+FROM pkpofficial/ojs:${OJS_IMAGE_TAG} AS pkp
+
+USER www-data
+WORKDIR /var/www/html
+RUN --mount=type=bind,from=composer-cli,source=/usr/bin/composer,target=/tmp/composer \
+    --mount=type=bind,source=security/update-dependencies.sh,target=/tmp/update-dependencies.sh \
+    --mount=type=tmpfs,target=/tmp/composer-home \
+    if grep -Fq '<release>3.5.0.5</release>' dbscripts/xml/version.xml; then \
+        COMPOSER_HOME=/tmp/composer-home sh /tmp/update-dependencies.sh; \
+    fi
+
+# OJS bindet TinyMCE auch in js/build.js ein. Fuer diesen Build fehlen im
+# Release-Image die npm-Manifeste und das UI-Submodul des PKP-Tags 3_5_0-5.
+FROM node:24.22.3-bookworm-slim@sha256:873f586f3794f52281bd039bf02c048a0be08fde619338f9941bad1eb6b34530 AS editor
+WORKDIR /build
+ADD --checksum=sha256:c6268e64f6eb116ede748126f16ddd96d5100d0f18180196dab524a9a6a5c998 https://raw.githubusercontent.com/pkp/ojs/372e3b84740344db6c2f85193c3eb3e4f539cb00/package.json /upstream/package.json
+ADD --checksum=sha256:4956bc253c6f397db349d0d2e7bf2aae585ddb0f27e6300405f05128b60e3bf2 https://raw.githubusercontent.com/pkp/ojs/372e3b84740344db6c2f85193c3eb3e4f539cb00/package-lock.json /upstream/package-lock.json
+ADD --checksum=sha256:02fc27258fb308e67ab8976f262612592404f99508144a29feef2e9976e881fb https://codeload.github.com/pkp/ui-library/tar.gz/ac2dabbc72c9f5d04e5da82ff5345f37b66389ea /upstream/ui-library.tar.gz
+COPY --from=pkp /var/www/html/ ./
+RUN --mount=type=bind,source=security/rebuild-editor.sh,target=/tmp/rebuild-editor.sh \
+    mkdir /editor-assets && \
+    if grep -Fq '<release>3.5.0.5</release>' dbscripts/xml/version.xml; then \
+        sh /tmp/rebuild-editor.sh; \
+    fi
+
+FROM pkp AS base
+COPY --from=editor --chown=www-data:www-data /editor-assets/ /var/www/html/
 
 USER root
 

@@ -41,7 +41,8 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/mnt:ro" -w /mnt \
             koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d \
-            --shell=sh docker/ojs/stage/ojs-stage-start docker/ojs/stage/ojs-worker
+            --shell=sh docker/ojs/stage/ojs-stage-start docker/ojs/stage/ojs-worker \
+            docker/ojs/security/update-dependencies.sh docker/ojs/security/rebuild-editor.sh
 
       - name: Lint workflows (actionlint)
         run: |
@@ -62,7 +63,11 @@ jobs:
           set -euo pipefail
           docker compose -f docker-compose.dev.yml --env-file .env.example config --quiet
           docker compose -f docker-compose.stage.yml config --quiet
-          docker compose -f docker-compose.prod.yml config --quiet
+          # Production startet standardmäßig nur die Blauen Bände.
+          docker compose -f docker-compose.prod.yml config --format json |
+            jq -e '[.services | to_entries[] | select((.value.deploy.replicas // 1) > 0) | .key] == ["ojs-emtf"]'
+          OJS_PROD_REPLICAS=1 docker compose -f docker-compose.prod.yml config --format json |
+            jq -e 'all(.services[]; (.deploy.replicas // 1) == 1)'
 
       - name: Require the deployment image template markers
         run: |
@@ -134,7 +139,7 @@ jobs:
 
           cat > "$RUNNER_TEMP/ci-override.yml" <<EOF
           services:
-            ojs-app: { image: $CI_IMAGE, pull_policy: never }
+            ojs-app: { image: $CI_IMAGE, pull_policy: never, ports: ["127.0.0.1::80"] }
             ojs-queue: { image: $CI_IMAGE, pull_policy: never }
             ojs-scheduler: { image: $CI_IMAGE, pull_policy: never }
             ojs-emtf: { image: $CI_EMTF_IMAGE, pull_policy: never }
@@ -173,6 +178,20 @@ jobs:
           grep -q 'ojs-worker:jobs\] OJS ist noch nicht installiert' <<< "$worker_logs"
           grep -q 'ojs-worker:scheduler\] OJS ist noch nicht installiert' <<< "$worker_logs"
           compose exec -T ojs-app grep -q '^job_runner = Off' /var/www/config/config.inc.php
+
+          compose cp scripts/check-ojs-editor.html ojs-app:/var/www/html/check-ojs-editor.html
+          editor_url="http://$(compose port ojs-app 80)/check-ojs-editor.html"
+          for source in bundle standalone; do
+            dom="$RUNNER_TEMP/editor-$source.html"
+            google-chrome --headless --no-sandbox --disable-dev-shm-usage --disable-background-networking \
+              --user-data-dir="$RUNNER_TEMP/chrome-$source" --virtual-time-budget=15000 \
+              --dump-dom "$editor_url?source=$source" > "$dom"
+            if ! grep -Fq '<output id="result">ok</output>' "$dom"; then
+              echo "Editor check failed for $source" >&2
+              grep -o '<output id="result">[^<]*</output>' "$dom" >&2 || true
+              exit 1
+            fi
+          done
 
           # Statische EMTF-Sammlung: Einstieg, Weiterleitung ohne Schraegstrich,
           # eine Unterseite und die Abgrenzung nach aussen.
