@@ -62,7 +62,11 @@ jobs:
           set -euo pipefail
           docker compose -f docker-compose.dev.yml --env-file .env.example config --quiet
           docker compose -f docker-compose.stage.yml config --quiet
-          docker compose -f docker-compose.prod.yml config --quiet
+          # Production startet standardmäßig nur die Blauen Bände.
+          docker compose -f docker-compose.prod.yml config --format json |
+            jq -e '[.services | to_entries[] | select((.value.deploy.replicas // 1) > 0) | .key] == ["ojs-emtf"]'
+          OJS_PROD_REPLICAS=1 docker compose -f docker-compose.prod.yml config --format json |
+            jq -e 'all(.services[]; (.deploy.replicas // 1) == 1)'
 
       - name: Require the deployment image template markers
         run: |

@@ -1,8 +1,8 @@
 # =============================================================================
-# OJS Production – https://ojs.rz-vm499.gfz.de (RZ-VM499)
+# Production (RZ-VM499) – Blaue Bände unter https://dataservices.gfz.de/emtf/
 # =============================================================================
 # Diese Datei auf main ist eine VORLAGE: "Promote Production Release" ersetzt jeden
-# Image-Marker mit dem Tag "deployment-template" (genau 3: app, queue, scheduler)
+# Image-Marker mit dem Tag "deployment-template" (App, Queue, Scheduler und EMTF)
 # durch den Digest, der zuvor auf Stage lief, und committet das Ergebnis nach
 # deploy/prod. Portainer folgt deploy/prod.
 #
@@ -18,15 +18,20 @@
 # Stack-Variablen (Portainer): OJS_DB_PASSWORD, OJS_DB_ROOT_PASSWORD,
 #   MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_ENCRYPTION, MAIL_FROM_ADDRESS
 #   optional: OJS_RUN_UPGRADE, OJS_ALLOW_INSTALLER, OJS_WORKER_WAIT_SECONDS,
-#             OJS_DB_NAME, OJS_DB_USER
+#             OJS_DB_NAME, OJS_DB_USER, OJS_PROD_REPLICAS (0 = nur EMTF, 1 = mit OJS)
 # Rollback: OJS_PROD_APP_IMAGE=ghcr.io/mcnamara84/ojs-app@sha256:<digest>
 #           OJS_PROD_EMTF_IMAGE=ghcr.io/mcnamara84/ojs-emtf@sha256:<digest>
 # Details: docs/production-deployment.md
 # =============================================================================
 
+# Im Archivbetrieb skaliert Compose beim Redeploy auch vorhandene OJS-Container auf null.
+x-ojs-deploy: &ojs-deploy
+  replicas: ${OJS_PROD_REPLICAS:-0}
+
 services:
   ojs-app:
     image: "${OJS_PROD_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app:deployment-template}"
+    deploy: *ojs-deploy
     pull_policy: always
     container_name: ojs-prod-app
     restart: unless-stopped
@@ -76,6 +81,7 @@ services:
 
   ojs-queue:
     image: "${OJS_PROD_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app:deployment-template}"
+    deploy: *ojs-deploy
     pull_policy: always
     container_name: ojs-prod-queue
     restart: unless-stopped
@@ -95,6 +101,7 @@ services:
 
   ojs-scheduler:
     image: "${OJS_PROD_APP_IMAGE:-ghcr.io/mcnamara84/ojs-app:deployment-template}"
+    deploy: *ojs-deploy
     pull_policy: always
     container_name: ojs-prod-scheduler
     restart: unless-stopped
@@ -138,6 +145,7 @@ services:
     # 11.8.9 ist ein Upgrade des bestehenden Datenverzeichnisses (war 11.8.6).
     # MariaDB unterstuetzt nur Upgrades, niemals aeltere Versionen auf neuen Daten.
     image: mariadb:11.8.9@sha256:79d59758afc91b89b120b0a8904d637f5a3b3e1c4900f29b740d6d46c72fef68
+    deploy: *ojs-deploy
     container_name: ojs-prod-db
     restart: unless-stopped
     environment:
