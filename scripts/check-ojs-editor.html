@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>OJS editor integration check</title>
+<textarea id="editor"></textarea>
+<output id="result">pending</output>
+<script src="/js/build/jquery/jquery.min.js"></script>
+<script>
+  window.pkp = {const: {}, localeKeys: {}, context: {}};
+  const dist = '/lib/pkp/lib/vendor/tinymce/tinymce';
+  const plugins = '/plugins/generic/tinymce/plugins';
+  const source = new URLSearchParams(location.search).get('source');
+  const result = document.getElementById('result');
+  const script = document.createElement('script');
+  script.src = source === 'bundle' ? '/js/build.js' : dist + '/tinymce.min.js';
+  script.onerror = () => { result.textContent = 'Could not load ' + script.src; };
+  script.onload = async () => {
+    try {
+      if (source === 'bundle' && !window.pkp.controllers?.SubmissionWizardPage) {
+        throw new Error('OJS backend bundle did not finish loading');
+      }
+      const manifest = await fetch(dist + '/package.json').then(response => response.json());
+      const version = tinymce.majorVersion + '.' + tinymce.minorVersion;
+      if (version !== manifest.version) {
+        throw new Error(source + ' loaded ' + version + ', expected ' + manifest.version);
+      }
+      const [editor] = await tinymce.init({
+        selector: '#editor',
+        license_key: 'gpl',
+        base_url: dist,
+        skin: 'tinymce-5',
+        plugins: 'link lists code',
+        external_plugins: {
+          pkpTags: plugins + '/pkpTags/plugin.js',
+          pkpwordcount: plugins + '/pkpWordcount/plugin.js',
+        },
+      });
+      editor.setContent('<p>Archive</p>');
+      if (editor.mode.isReadOnly() || editor.getContent({format: 'text'}) !== 'Archive' ||
+          !editor.hasPlugin('pkpTags', true) || !editor.hasPlugin('pkpwordcount', true)) {
+        throw new Error('OJS editor or plugins unavailable');
+      }
+      result.textContent = 'ok';
+    } catch (error) {
+      result.textContent = String(error);
+    }
+  };
+  document.head.append(script);
+</script>
+</html>
