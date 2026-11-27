@@ -198,4 +198,4 @@ Zusätzlich sichern: `ojs_ojs_private` (Einreichungsdateien) und `ojs-prod-confi
 | Es erscheint der Installer statt der Seite | Die Datenbank ist nachweislich leer (keine einzige Tabelle). **Nicht** abschicken, sondern prüfen, ob das richtige Volume eingebunden ist |
 | `ojs-prod-app` bleibt *unhealthy* | Datenbank-Upgrade fehlgeschlagen. Log prüfen, notfalls Backup einspielen |
 | Traefik antwortet unter `https://dataservices.gfz.de/emtf/` mit 404 | Bei `ojs-prod-emtf` das Netzwerk `traefik` und das Label `traefik.enable=true` prüfen |
-| `deploy/prod` bewegt sich nicht | Läufe von „Promote Production Release“ prüfen. Blockiert wird unter anderem, wenn es für den Release-Commit keinen `deploy/stage`-Commit gibt |
+| `deploy/prod` bewegt sich nach einem Release nicht | Im Job `validate` von „Promote Production Release“ die Stage-Läufe für den getaggten Commit prüfen. Waren sie bei Veröffentlichung noch offen, `validate` nach ihrem Erfolg erneut starten. Erfordert die Reparatur einen neuen Commit, nach dessen erfolgreichem Stage-Deployment einen neuen Patch-Release veröffentlichen. |
