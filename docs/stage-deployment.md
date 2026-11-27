@@ -172,12 +172,11 @@ Zusätzlich die Volumes `ojs-files`, `ojs-public` und `ojs-config` sichern.
 
 ## Sicherheitsbefunde (`.trivyignore`)
 
-Das offizielle PKP-Image bringt veraltete Debian-Pakete mit. Der Build führt deshalb `apt-get upgrade` aus, und `SYSTEM_PACKAGES_REFRESH` erzwingt das täglich neu. Übrig bleiben Befunde in PHP-Bibliotheken, die PKP mitliefert:
+Der Build aktualisiert Debian-Pakete mit `apt-get upgrade`. Der Tageswert von `SYSTEM_PACKAGES_REFRESH` sorgt dafür, dass neue Paketstände in den Build einfließen.
 
-- **guzzle:** CVE-2026-69246.
-- **commonmark:** mehrere Befunde. OJS nutzt die Bibliothek nicht, sie kommt nur über `laravel/framework` mit.
+Für OJS 3.5.0-5 aktualisiert `docker/ojs/security/update-dependencies.sh` die betroffenen Composer-Pakete im Kern und in der separaten PayPal-Installation. TinyMCE wird sowohl direkt vom PHP-Plugin als auch im JavaScript-Bundle der Vue-Oberfläche geladen. `rebuild-editor.sh` baut dieses Bundle mit derselben Editorversion und den Quellen des PKP-Releases. Der Browser-Test in den Stage Checks prüft beide Einstiegspunkte einschließlich der OJS-Editorplugins.
 
-Diese Befunde stehen mit Begründung und **Ablaufdatum 21.11.2026** in `.trivyignore`. Nach Ablauf blockiert das Gate wieder und erzwingt eine Neubewertung, idealerweise durch ein neues OJS-Release.
+Bei einem anderen PKP-Release verwendet der Build dessen mitgelieferte Bibliotheken und Oberfläche. Beim Versionswechsel zeigen die Image-Scans, ob die gezielten Aktualisierungen noch nötig sind. Die gemeinsame `.trivyignore` enthält derzeit keine Ausnahmen.
 
 ## Fehlersuche
 
@@ -192,4 +191,4 @@ Diese Befunde stehen mit Begründung und **Ablaufdatum 21.11.2026** in `.trivyig
 | 404 von Traefik | Der Container hängt nicht im Netzwerk `traefik`, oder das Label `traefik.enable=true` fehlt |
 | `deploy/stage` bewegt sich nicht | Die Läufe von **Stage Checks** bzw. **Publish Stage Images** prüfen. Ein veralteter Lauf überspringt die Promotion absichtlich |
 | Push nach GHCR oder `deploy/stage` scheitert mit 403 | Workflow-Rechte prüfen (Schritt 2) |
-| Trivy blockiert nach dem 21.11.2026 | Die `.trivyignore`-Einträge sind abgelaufen, siehe Abschnitt „Sicherheitsbefunde“ |
+| Trivy blockiert ein Image | Im Scan-Log den Paketpfad und die korrigierte Version prüfen. Der OJS-Kern und das PayPal-Plugin haben eigene Lockdateien. |
