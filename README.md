@@ -12,7 +12,7 @@ Die Umgebung ist eigenständig: Sie hat ein eigenes Netzwerk und keinen Reverse-
 
 > **Stage:** Jeder Merge nach `main` wird automatisch nach **https://ojs.rz-vm182.gfz.de** (nur im VPN) deployt. Siehe [docs/stage-deployment.md](docs/stage-deployment.md).
 >
-> **Produktion:** Ein veröffentlichter Release (`vX.Y.Z`) befördert genau den auf Stage erprobten Image-Digest nach **https://ojs.rz-vm499.gfz.de**. Siehe [docs/production-deployment.md](docs/production-deployment.md).
+> **Produktion** liefert vorerst nur die [Blauen Bände](https://dataservices.gfz.de/emtf/) aus. OJS ist standardmäßig pausiert. Release und Wiederinbetriebnahme sind in der [Deployment-Anleitung](docs/production-deployment.md) beschrieben.
 
 ## Erstes Setup
 
